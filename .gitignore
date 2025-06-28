@@ -43,3 +43,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+# local dependencies (optional - remove if you want to commit jar files)
+# libs/*.jar

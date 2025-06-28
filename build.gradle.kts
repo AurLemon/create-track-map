@@ -28,11 +28,27 @@ repositories {
   maven("https://jitpack.io")  // MixinExtras, Fabric ASM
   maven("https://maven.jamieswhiteshirt.com/libs-release")  // Reach Entity Attributes
   maven("https://api.modrinth.com/maven")  // LazyDFU
-  maven("https://maven.tterrag.com/")  // Create Forge, Flywheel
+  
+  // Create Forge, Flywheel - 添加多个镜像源以提高稳定性
+  maven("https://modmaven.dev/") {
+    name = "modmaven"
+  }
+  maven("https://maven.tterrag.com/") {
+    name = "tterrag"
+  }
+  maven("https://cursemaven.com") {
+    name = "CurseMaven"
+    content {
+      includeGroup("curse.maven")
+    }
+  }
+  
   maven("https://maven.theillusivec4.top/")  // Curios
   maven("https://thedarkcolour.github.io/KotlinForForge/")
   maven("https://maven.blamejared.com/")  // JEI
   maven("https://squiddev.cc/maven/")  // CC: Tweaked
+  
+
 }
 
 val shadowDep: Configuration by configurations.creating
@@ -54,14 +70,14 @@ minecraft {
 dependencies {
   minecraft("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
   implementation("thedarkcolour:kotlinforforge:$forge_kotlin_version")
-  implementation(fg.deobf("com.simibubi.create:create-${minecraft_version}:${create_version}:slim"))
+  
+  implementation(fg.deobf(files("libs/create-1.18.2-0.5.1.f.jar")))
 
   shadowDep("io.ktor:ktor-server-core-jvm:$ktor_version")
   shadowDep("io.ktor:ktor-server-cio-jvm:$ktor_version")
   shadowDep("io.ktor:ktor-server-cors-jvm:$ktor_version")
   shadowDep("org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version")
-
-  // included in Kotlin for Forge
+  
   compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlin_json_version")
 }
 
@@ -123,6 +139,11 @@ tasks {
     }
     configurations = listOf(shadowDep)
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    // 重新定位依赖以避免与其他模组冲突
+    relocate("org.fusesource.jansi", "littlechasiu.ctm.shaded.jansi")
+    relocate("io.ktor", "littlechasiu.ctm.shaded.ktor")
+    relocate("kotlinx.css", "littlechasiu.ctm.shaded.kotlinx.css")
   }
 
   reobf {
