@@ -28,7 +28,7 @@ repositories {
   maven("https://jitpack.io")  // MixinExtras, Fabric ASM
   maven("https://maven.jamieswhiteshirt.com/libs-release")  // Reach Entity Attributes
   maven("https://api.modrinth.com/maven")  // LazyDFU
-  maven("https://maven.tterrag.com/")  // Create Forge, Flywheel
+  maven("https://maven.createmod.net")  // Create Forge, Flywheel
   maven("https://maven.theillusivec4.top/")  // Curios
   maven("https://thedarkcolour.github.io/KotlinForForge/")
   maven("https://maven.blamejared.com/")  // JEI
@@ -42,6 +42,7 @@ configurations.minecraftLibrary.get().extendsFrom(shadowDep)
 val forge_version: String by project
 val forge_kotlin_version: String by rootProject
 val create_version: String by rootProject
+val ponder_version: String by rootProject
 
 val ktor_version: String by rootProject
 val kotlin_json_version: String by rootProject
@@ -55,6 +56,7 @@ dependencies {
   minecraft("net.neoforged:forge:${minecraft_version}-${forge_version}")
   implementation("thedarkcolour:kotlinforforge:$forge_kotlin_version")
   implementation(fg.deobf("com.simibubi.create:create-${minecraft_version}:${create_version}:slim"))
+  implementation("net.createmod.ponder:Ponder-Forge-${minecraft_version}:${ponder_version}")
 
   shadowDep("io.ktor:ktor-server-core-jvm:$ktor_version")
   shadowDep("io.ktor:ktor-server-cio-jvm:$ktor_version")
