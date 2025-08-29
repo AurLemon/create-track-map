@@ -1,1 +1,1 @@
-- Added support for Minecraft 1.20.1.
+- Added support for Create 6.0.6
