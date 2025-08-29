@@ -6,7 +6,7 @@ license = "MIT"
 modId = "createtrackmap"
 version = "${version}"
 displayName = "Create Track Map"
-authors = "LittleChaSiu"
+authors = "LittleChaSiu, AyOhEe"
 description = "A map of Create train tracks"
 logoFile = "icon.png"
 
