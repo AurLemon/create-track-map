@@ -1,1 +1,2 @@
-- Added support for Create 6.0.6
+- Updated create to 6.0.8
+- Updated KotlinForForge to 4.4.0

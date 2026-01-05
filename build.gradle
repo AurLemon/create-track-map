@@ -4,9 +4,9 @@ plugins {
     id "idea"
     id "maven-publish"
     id "net.neoforged.gradle" version "[6.0.13, 6.2)"
-    id "org.jetbrains.kotlin.jvm" version "1.8.10"
-    id "org.jetbrains.kotlin.plugin.serialization" version "1.8.10"
-    id "com.github.johnrengelman.shadow" version "7.1.2"
+    id "org.jetbrains.kotlin.jvm" version "2.3.0"
+    id "org.jetbrains.kotlin.plugin.serialization" version "2.3.0"
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 version = mod_version
@@ -16,6 +16,12 @@ var archives_version = "$mod_version+mc$minecraft_version-neoforge"
 
 base {
     archivesName = archives_base_name
+}
+
+configurations {
+    shade
+    implementation.extendsFrom shade
+    minecraftLibrary.extendsFrom shade
 }
 
 minecraft {
@@ -41,11 +47,6 @@ minecraft {
                     source sourceSets.main
                 }
             }
-
-            //runtime "io.ktor:ktor-server-core-jvm:$ktor_version"
-            //runtime "io.ktor:ktor-server-cio-jvm:$ktor_version"
-            //runtime "io.ktor:ktor-server-cors-jvm:$ktor_version"
-            //runtime "org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version"
         }
 
         client {
@@ -100,10 +101,30 @@ dependencies {
     minecraft("net.neoforged:forge:${minecraft_version}-${forge_version}")
     implementation("thedarkcolour:kotlinforforge:$forge_kotlin_version")
 
-    shadow("io.ktor:ktor-server-core-jvm:$ktor_version")
-    shadow("io.ktor:ktor-server-cio-jvm:$ktor_version")
-    shadow("io.ktor:ktor-server-cors-jvm:$ktor_version")
-    shadow("org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version")
+    shade("io.ktor:ktor-server-cio-jvm:$ktor_version") {
+        transitive = true
+        exclude group: "org.jetbrains.kotlin"
+        exclude group: "org.jetbrains.kotlinx"
+        exclude group: "org.fusesource"
+        exclude group: "org.slf4j"
+    }
+    shade("io.ktor:ktor-server-core-jvm:$ktor_version") {
+        transitive = true
+        exclude group: "org.jetbrains.kotlin"
+        exclude group: "org.jetbrains.kotlinx"
+        exclude group: "org.fusesource"
+        exclude group: "org.slf4j"
+    }
+    shade("io.ktor:ktor-server-cors-jvm:$ktor_version") {
+        transitive = true
+        exclude group: "org.jetbrains.kotlin"
+        exclude group: "org.jetbrains.kotlinx"
+        exclude group: "org.fusesource"
+        exclude group: "org.slf4j"
+    }
+    shade("org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version") {
+        transitive = false
+    }
 
     // included in Kotlin for Forge
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlin_json_version")
@@ -123,8 +144,15 @@ var targetJavaVersion = 17
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
 java.toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
 
+reobf {
+    jar {
+        enabled = false
+    }
+    shadowJar {}
+}
+
 jar {
-    archiveFileName = "create-track-map-$mod_version+mc$minecraft_version-neoforge-slim.jar"
+    enabled = false
 }
 
 java {
@@ -175,23 +203,11 @@ compileKotlin {
 }
 
 shadowJar {
+    archiveClassifier = ''
     archivesBaseName = archives_base_name
-    version = archives_version
-    setArchiveClassifier("")
-
-    dependencies {
-        exclude(dependency("org.jetbrains.kotlin:.*"))
-        exclude(dependency("org.jetbrains.kotlinx:kotlinx-coroutines-.*"))
-        exclude(dependency("org.slf4j:.*"))
-    }
-    configurations = [project.configurations.shadow]
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    mergeServiceFiles {
-        include 'META-INF/services/*'
-    }
+    version = "$mod_version+mc$minecraft_version-neoforge"
+    configurations = [project.configurations.shade]
+    finalizedBy 'reobfShadowJar'
 }
 
-reobf {
-    shadowJar {}
-}
+assemble.dependsOn shadowJar
