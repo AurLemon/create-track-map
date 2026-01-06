@@ -1,2 +1,3 @@
 - Updated create to 6.0.8
-- Updated KotlinForForge to 4.4.0
+- Updated KotlinForForge to 4.12.0
+- Updated KTOR to 3.3.0
