@@ -1,14 +1,16 @@
 modLoader = "kotlinforforge"
 loaderVersion = "[4.4,)"
 license = "MIT"
+issueTrackerURL="https://github.com/AyOhEe/create-track-map/issues"
 
 [[mods]]
 modId = "createtrackmap"
 version = "${version}"
 displayName = "Create Track Map"
+displayURL="https://github.com/AyOhEe/create-track-map"
 authors = "LittleChaSiu, AyOhEe"
 description = "A map of Create train tracks"
-logoFile = "icon.png"
+logoFile = "assets/littlechasiu/ctm/static/assets/logo.png"
 
 [[dependencies.createtrackmap]]
 modId = "forge"
