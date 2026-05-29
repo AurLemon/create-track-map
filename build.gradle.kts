@@ -19,6 +19,7 @@ repositories {
     maven("https://maven.jamieswhiteshirt.com/libs-release")  // Reach Entity Attributes
     maven("https://api.modrinth.com/maven")  // LazyDFU
     maven("https://maven.createmod.net")  // Create Forge, Flywheel, Ponder
+    maven("https://maven.minecraftforge.net")
     maven("https://maven.ithundxr.dev/mirror") // Registrate
     maven("https://maven.theillusivec4.top/")  // Curios
     maven("https://thedarkcolour.github.io/KotlinForForge/")
@@ -57,7 +58,7 @@ configurations.getByName("implementation").extendsFrom(shade)
 configurations.getByName("minecraftLibrary").extendsFrom(shade)
 
 dependencies {
-    minecraft("net.neoforged:forge:${minecraft_version}-${forge_version}")
+    minecraft("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
     implementation("thedarkcolour:kotlinforforge:$forge_kotlin_version")
 
     shade("io.ktor:ktor-server-cio-jvm:$ktor_version")
@@ -190,6 +191,9 @@ tasks {
             exclude(dependency("org.jetbrains.kotlinx:kotlinx-serialization-.*"))
             exclude(dependency("org.slf4j:.*"))
         }
+        relocate("com.typesafe.config", "littlechasiu.ctm.com.typesafe.config")
+        relocate("org.fusesource.jansi", "littlechasiu.ctm.org.fusesource.jansi")
+
         configurations = listOf(shade)
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
