@@ -46,6 +46,10 @@ class Server {
     "stations" to LayerConfig(label = "Stations"),
     "trains" to LayerConfig(label = "Trains"),
   )
+  var satelliteMaps = mapOf(
+    "minecraft:overworld" to SatelliteMapConfig(),
+  )
+  var injectionCssPath: Path? = null
 
   private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
@@ -111,7 +115,7 @@ class Server {
 
   private val mapConfig: MapConfig
     get() =
-      MapConfig(mapView, dimensions, layers)
+      MapConfig(mapView, dimensions, layers, satelliteMaps)
 
   private fun Application.module() {
     routing {
@@ -166,6 +170,15 @@ class Server {
               "lead-car-color" to Color(mapStyle.colors.leadCar),
             )
           }
+        }
+      }
+
+      get("/api/injection.css") {
+        val path = injectionCssPath
+        if (path != null && Files.exists(path)) {
+          call.respondText(Files.readString(path), ContentType.Text.CSS)
+        } else {
+          call.respondText("", ContentType.Text.CSS)
         }
       }
 

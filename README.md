@@ -144,11 +144,11 @@ The following options are available:
 
     // Zoom levels must be integers, but may be negative.
     // Each zoom level is twice as big as the previous.
-    // 0 is a decent minimum but may be impractical for large networks.
-    // 3 is the sensible default for viewing double-tracked networks.
-    "initial_zoom": 3,
-    "min_zoom": 0,
-    "max_zoom": 4,
+    // -3 matches the default satellite map's furthest zoom-out level.
+    // 3 matches the default satellite map's furthest zoom-in level.
+    "initial_zoom": -3,
+    "min_zoom": -3,
+    "max_zoom": 3,
 
     // Whether a zoom control should be visible on the screen.
     "zoom_controls": true,
@@ -172,36 +172,49 @@ The following options are available:
     }
   },
 
+  "satellite_maps": {
+    "minecraft:overworld": {
+      "tiles_url": "https://map.nitrogen.hydcraft.cn/tiles",
+      "world": "world",
+      "map_type": "flat",
+      "map_zoom_in": 1,
+      "map_zoom_out": 5,
+      "scale": 4,
+      "tile_scale": 0,
+      "y_origin_offset_blocks": 32
+    }
+  },
+
   "layers": {
     "tracks": {
       "label": "Tracks",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     },
     "blocks": {
       "label": "Track Occupancy",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     },
     "signals": {
       "label": "Signals",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     },
     "portals": {
       "label": "Portals",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     },
     "stations": {
       "label": "Stations",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     },
     "trains": {
       "label": "Trains",
-      "min_zoom": 0,
-      "max_zoom": 4
+      "min_zoom": -3,
+      "max_zoom": 3
     }
   }
 }

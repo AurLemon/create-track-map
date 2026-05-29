@@ -130,6 +130,10 @@ body.ctm-dark #map {
 }
 
 .coords-control {
+  box-sizing: border-box;
+  width: var(--ctm-coords-width, max-content);
+  overflow: hidden;
+  white-space: nowrap;
   font-family: var(--ui-font);
   font-size: 16px;
   font-weight: 500;
@@ -138,6 +142,11 @@ body.ctm-dark #map {
   box-shadow: var(--ctm-shadow-control);
   border-radius: var(--ctm-radius-md);
   padding: 2px 4px;
+  transition:
+    width 180ms ease,
+    background-color var(--ctm-transition-fast),
+    color var(--ctm-transition-fast);
+  will-change: width;
 }
 
 body.ctm-dark .coords-control {

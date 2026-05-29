@@ -257,6 +257,9 @@ class LayerManager {
   _onOverlayAdd({ layer }) {
     let zoom = this.map.getZoom()
     let layerConfig = this.layerConfigs[layer.name]
+    if (!layerConfig) {
+      return
+    }
     let dimLayer = this.dimension(this.currentDimension)[layer.name]
     if (zoom >= layerConfig.minZoom && zoom <= layerConfig.maxZoom) {
       dimLayer.addTo(this.map)
@@ -264,6 +267,9 @@ class LayerManager {
   }
 
   _onOverlayRemove({ layer }) {
+    if (!this.layerConfigs[layer.name]) {
+      return
+    }
     this.map.removeLayer(this.dimension(this.currentDimension)[layer.name])
   }
 

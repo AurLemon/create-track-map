@@ -43,6 +43,7 @@ L.Control.Coords = L.Control.extend({
 
   onAdd(map) {
     let el = this._createElement()
+    this.container = el
 
     this.centerX = el.getElementsByClassName("center-x")[0]
     this.centerZ = el.getElementsByClassName("center-z")[0]
@@ -59,6 +60,7 @@ L.Control.Coords = L.Control.extend({
 
     this._updateCenterCoords()
     this._clearCursorCoords()
+    this._updateWidth(true)
 
     return el
   },
@@ -80,6 +82,7 @@ L.Control.Coords = L.Control.extend({
 
     this.centerX.textContent = x.toString()
     this.centerZ.textContent = z.toString()
+    this._updateWidth()
   },
 
   _updateCursorCoords(event) {
@@ -90,16 +93,63 @@ L.Control.Coords = L.Control.extend({
     this.cursor.style.display = "block"
     this.cursorX.textContent = x.toString()
     this.cursorZ.textContent = z.toString()
+    this._updateWidth()
   },
 
   _showCursorCoords() {
     this.cursor.style.display = "block"
+    this._updateWidth()
   },
 
   _clearCursorCoords() {
     this.cursor.style.display = "none"
     this.cursorX.textContent = "--"
     this.cursorZ.textContent = "--"
+    this._updateWidth()
+  },
+
+  _measureWidth() {
+    if (!this.container) {
+      return 0
+    }
+
+    const clone = this.container.cloneNode(true)
+    clone.style.position = "absolute"
+    clone.style.visibility = "hidden"
+    clone.style.pointerEvents = "none"
+    clone.style.width = "max-content"
+    clone.style.transition = "none"
+    clone.style.left = "-9999px"
+    clone.style.bottom = "0"
+    document.body.appendChild(clone)
+    const width = Math.ceil(clone.getBoundingClientRect().width)
+    clone.remove()
+
+    return width
+  },
+
+  _updateWidth(skipTransition = false) {
+    if (!this.container) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      const targetWidth = this._measureWidth()
+      if (!targetWidth) {
+        return
+      }
+
+      if (skipTransition) {
+        this.container.style.setProperty("--ctm-coords-width", `${targetWidth}px`)
+        return
+      }
+
+      const currentWidth = Math.ceil(this.container.getBoundingClientRect().width)
+      this.container.style.setProperty("--ctm-coords-width", `${currentWidth}px`)
+      window.requestAnimationFrame(() => {
+        this.container.style.setProperty("--ctm-coords-width", `${targetWidth}px`)
+      })
+    })
   },
 })
 

@@ -28,6 +28,7 @@ object TrackMap {
   const val MODID: String = "createtrackmap"
 
   private const val configFileName = "create-track-map.json"
+  private const val injectionCssFileName = "create-track-map-injection.css"
 
   @OptIn(ExperimentalSerializationApi::class)
   private val JSON = Json {
@@ -57,10 +58,28 @@ object TrackMap {
   val blockFlow = watcher.blockChannel.flow
   val trainFlow = watcher.trainChannel.flow
 
+  private fun ensureInjectionCss(configDir: Path): Path {
+    val injectionCssFile = configDir.resolve(injectionCssFileName)
+
+    if (!Files.exists(injectionCssFile)) {
+      LOGGER.warn("Create Track Map injection CSS does not exist, writing defaults to $injectionCssFileName")
+      Files.writeString(
+        injectionCssFile,
+        "/* Add Create Track Map custom CSS here. */\n",
+        StandardOpenOption.CREATE_NEW
+      )
+    }
+
+    return injectionCssFile
+  }
+
   @OptIn(ExperimentalSerializationApi::class)
   private fun loadConfig() {
+    var injectionCssFile: Path? = null
     try {
-      val configFile = Path.of(FMLPaths.CONFIGDIR.get().toString(), configFileName)
+      val configDir = Path.of(FMLPaths.CONFIGDIR.get().toString())
+      val configFile = configDir.resolve(configFileName)
+      injectionCssFile = ensureInjectionCss(configDir)
 
       if (Files.exists(configFile)) {
         config = JSON.decodeFromStream(Files.newInputStream(configFile))
@@ -86,6 +105,8 @@ object TrackMap {
     server.mapView = config.mapView
     server.dimensions = config.dimensions
     server.layers = config.layers
+    server.satelliteMaps = config.satelliteMaps
+    server.injectionCssPath = injectionCssFile
   }
 
   private fun reload() {

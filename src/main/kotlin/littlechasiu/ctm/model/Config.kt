@@ -87,18 +87,18 @@ data class MapView(
   val initialPosition: Coordinates = Coordinates(0, 0),
   @SerialName("initial_zoom")
   @EncodeDefault
-  val initialZoom: Int = 3,
+  val initialZoom: Int = -3,
 
   @SerialName("min_zoom")
   @EncodeDefault
-  val minZoom: Int = 0,
+  val minZoom: Int = -3,
   @SerialName("max_zoom")
   @EncodeDefault
-  val maxZoom: Int = 4,
+  val maxZoom: Int = 3,
 
   @SerialName("zoom_controls")
   @EncodeDefault
-  val zoomControls: Boolean = false,
+  val zoomControls: Boolean = true,
 
   @SerialName("signals_on")
   @EncodeDefault
@@ -111,10 +111,10 @@ data class LayerConfig(
   val label: String,
   @SerialName("min_zoom")
   @EncodeDefault
-  val minZoom: Int = 0,
+  val minZoom: Int = -3,
   @SerialName("max_zoom")
   @EncodeDefault
-  val maxZoom: Int = 4,
+  val maxZoom: Int = 3,
 )
 
 @Serializable
@@ -123,10 +123,39 @@ data class DimensionConfig(
 )
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
+data class SatelliteMapConfig(
+  @SerialName("tiles_url")
+  @EncodeDefault
+  val tilesUrl: String = "https://map.nitrogen.hydcraft.cn/tiles",
+  @EncodeDefault
+  val world: String = "world",
+  @SerialName("map_type")
+  @EncodeDefault
+  val mapType: String = "flat",
+  @SerialName("map_zoom_in")
+  @EncodeDefault
+  val mapZoomIn: Int = 1,
+  @SerialName("map_zoom_out")
+  @EncodeDefault
+  val mapZoomOut: Int = 5,
+  @EncodeDefault
+  val scale: Int = 4,
+  @SerialName("tile_scale")
+  @EncodeDefault
+  val tileScale: Int = 0,
+  @SerialName("y_origin_offset_blocks")
+  @EncodeDefault
+  val yOriginOffsetBlocks: Int = 32,
+)
+
+@Serializable
 data class MapConfig(
   val view: MapView,
   val dimensions: Map<String, DimensionConfig>,
   val layers: Map<String, LayerConfig>,
+  @SerialName("satellite_maps")
+  val satelliteMaps: Map<String, SatelliteMapConfig>,
 )
 
 @Serializable
@@ -161,5 +190,10 @@ data class Config @OptIn(ExperimentalSerializationApi::class) constructor(
     "portals" to LayerConfig(label = "Portals"),
     "stations" to LayerConfig(label = "Stations"),
     "trains" to LayerConfig(label = "Trains"),
+  ),
+  @SerialName("satellite_maps")
+  @EncodeDefault
+  val satelliteMaps: Map<String, SatelliteMapConfig> = mapOf(
+    "minecraft:overworld" to SatelliteMapConfig(),
   ),
 )

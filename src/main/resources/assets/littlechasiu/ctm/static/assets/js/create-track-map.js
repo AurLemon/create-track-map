@@ -10,20 +10,137 @@ map.createPane("signals")
 map.createPane("trains")
 map.createPane("portals")
 map.createPane("stations")
+map.createPane("satellite")
 map.getPane("tracks").style.zIndex = 300
 map.getPane("blocks").style.zIndex = 500
 map.getPane("signals").style.zIndex = 600
 map.getPane("trains").style.zIndex = 700
 map.getPane("portals").style.zIndex = 800
 map.getPane("stations").style.zIndex = 800
+map.getPane("satellite").style.zIndex = 200
 
 map.getPane("tooltipPane").style.zIndex = 1000
+
+L.DynmapLayer = L.TileLayer.extend({
+  options: {
+    tileSize: 128,
+    minZoom: 0,
+    maxZoom: 6,
+    mapZoomIn: 1,
+    mapZoomOut: 5,
+    scale: 4,
+    tileScale: 0,
+    yOriginOffsetBlocks: 32,
+    world: "world",
+    mapType: "flat",
+    baseUrl: "",
+    pane: "satellite",
+    attribution: "Dynmap",
+  },
+
+  initialize(options) {
+    L.TileLayer.prototype.initialize.call(this, "", this._buildOptions(options))
+  },
+
+  _buildOptions(options) {
+    const tileScale = options?.tileScale ?? this.options.tileScale
+    const dynmapScale = options?.scale ?? this.options.scale
+    const mapZoomIn = options?.mapZoomIn ?? this.options.mapZoomIn
+    const mapZoomOut = options?.mapZoomOut ?? this.options.mapZoomOut
+    const nativeZoom = Math.log2(dynmapScale)
+
+    return {
+      ...options,
+      noWrap: true,
+      tileSize: 128 << tileScale,
+      minZoom: nativeZoom - mapZoomOut,
+      maxZoom: nativeZoom + mapZoomIn,
+      minNativeZoom: nativeZoom - mapZoomOut,
+      maxNativeZoom: nativeZoom,
+      nativeZoom,
+    }
+  },
+
+  setDynmapOptions(options) {
+    L.Util.setOptions(this, this._buildOptions(options))
+    this.redraw()
+    return this
+  },
+
+  _getTilePos(coords) {
+    const pos = L.TileLayer.prototype._getTilePos.call(this, coords)
+    const zoom = this._tileZoom
+    const nativeZoom = this.options.nativeZoom
+
+    if (zoom < nativeZoom) {
+      const offset = this.options.tileSize - this.options.yOriginOffsetBlocks * (2 ** zoom)
+      pos.y += Math.max(0, offset)
+    }
+
+    return pos
+  },
+
+  getTileUrl(coords) {
+    const nativeZoom = this.options.nativeZoom
+    const tileZoom = this._tileZoom
+    const urlZoom = this._getZoomForUrl()
+    const coordScale = 2 ** (urlZoom - tileZoom)
+    const tileX = Math.floor(coords.x * coordScale)
+    const tileY = Math.floor(coords.y * coordScale)
+    const zoomOutLevel = Math.max(0, nativeZoom - urlZoom)
+    const scale = 1 << zoomOutLevel
+    const scaledX = scale * tileX
+    const invertedY = -scale * (tileY + 1)
+    const chunkX = scaledX >> 5
+    const chunkY = invertedY >> 5
+    const prefix = zoomOutLevel === 0 ? "" : `${"z".repeat(zoomOutLevel)}_`
+    const fileName = `${prefix}${scaledX}_${invertedY}.jpg`
+
+    return `${this.options.baseUrl}/${this.options.world}/${this.options.mapType}/` +
+      `${chunkX}_${chunkY}/${fileName}`
+  },
+})
+
+L.dynmapLayer = (options) => new L.DynmapLayer(options)
 
 const lmgr = new LayerManager(map)
 const tmgr = new TrainManager(map, lmgr)
 const smgr = new StationManager(map, lmgr)
 
+let satelliteLayer = null
+let satelliteMaps = {}
+
 setupControlStacking(map, lmgr, tmgr, smgr)
+
+function normalizeSatelliteConfig(config) {
+  if (!config) {
+    return null
+  }
+
+  return {
+    baseUrl: config.tiles_url,
+    world: config.world,
+    mapType: config.map_type,
+    mapZoomIn: config.map_zoom_in,
+    mapZoomOut: config.map_zoom_out,
+    scale: config.scale,
+    tileScale: config.tile_scale,
+    yOriginOffsetBlocks: config.y_origin_offset_blocks,
+  }
+}
+
+function getSatelliteConfig(dimension) {
+  return normalizeSatelliteConfig(satelliteMaps[dimension] || satelliteMaps["minecraft:overworld"])
+}
+
+function setSatelliteDimension(dimension) {
+  const options = getSatelliteConfig(dimension)
+  if (!options || !satelliteLayer) {
+    return
+  }
+
+  satelliteLayer.setDynmapOptions(options)
+}
 
 function setupControlStacking(mapInstance, layerManager, trainManager, stationManager) {
   const minHeight = 120
@@ -82,6 +199,10 @@ function setupControlStacking(mapInstance, layerManager, trainManager, stationMa
 
     const applyLayout = () => {
       const expanded = controls.filter((item) => item.isExpanded())
+      const stackTop = controls
+        .map((item) => item.getContainer()?.getBoundingClientRect().top)
+        .filter((top) => Number.isFinite(top))
+        .reduce((min, top) => Math.min(min, top), mapBottom)
       let prevBottom = null
       let lastBottom = null
 
@@ -93,7 +214,7 @@ function setupControlStacking(mapInstance, layerManager, trainManager, stationMa
         }
 
         const containerTop = container.getBoundingClientRect().top
-        const offset = prevBottom ? Math.max(0, prevBottom - containerTop) : 0
+        const offset = prevBottom ? Math.max(0, prevBottom - containerTop) : stackTop - containerTop
         const available = Math.max(minHeight, mapBottom - (containerTop + offset) - gap)
 
         item.setMaxHeight(available)
@@ -234,7 +355,7 @@ let leftSide = false
 fetch("api/config.json")
   .then((resp) => resp.json())
   .then((cfg) => {
-    const { layers, view, dimensions } = cfg
+    const { layers, view, dimensions, satellite_maps } = cfg
     const {
       initial_dimension,
       initial_position,
@@ -245,15 +366,29 @@ fetch("api/config.json")
       signals_on,
     } = view
 
-    map.setMinZoom(min_zoom)
-    map.setMaxZoom(max_zoom)
+    satelliteMaps = satellite_maps || {}
+    const satelliteOptions = getSatelliteConfig(initial_dimension)
+    if (satelliteOptions) {
+      satelliteLayer = L.dynmapLayer(satelliteOptions).addTo(map)
+      lmgr.control.addOverlay(satelliteLayer, "卫星地图底图")
+      map.on("baselayerchange", ({ layer }) => setSatelliteDimension(layer.name))
+    }
+
+    const satelliteMaxZoom = satelliteLayer?.options?.maxZoom ?? max_zoom
+    const satelliteMinZoom = satelliteLayer?.options?.minZoom ?? min_zoom
+    const effectiveMinZoom = Math.min(min_zoom, satelliteMinZoom)
+    const effectiveMaxZoom = Math.min(max_zoom, satelliteMaxZoom)
+
+    map.setMinZoom(effectiveMinZoom)
+    map.setMaxZoom(effectiveMaxZoom)
 
     lmgr.setLayerConfig(layers)
     lmgr.setDimensionLabels(dimensions)
     lmgr.switchToDimension(initial_dimension)
 
     const { x: initialX, z: initialZ } = initial_position
-    map.setView([initialZ, initialX], initial_zoom)
+    const safeZoom = Math.min(effectiveMaxZoom, Math.max(effectiveMinZoom, initial_zoom))
+    map.setView([initialZ, initialX], safeZoom)
 
     if (!zoom_controls) {
       map.zoomControl.remove()
