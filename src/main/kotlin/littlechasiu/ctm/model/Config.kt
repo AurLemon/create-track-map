@@ -79,6 +79,12 @@ enum class TrackSide {
 @Serializable
 @OptIn(ExperimentalSerializationApi::class)
 data class MapView(
+  @EncodeDefault
+  val title: String = "Create Track Map",
+  @SerialName("footer_text")
+  @EncodeDefault
+  val footerText: String = "Forge 1.20.1",
+
   @SerialName("initial_dimension")
   @EncodeDefault
   val initialDimension: String = "minecraft:overworld",

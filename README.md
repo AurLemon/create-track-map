@@ -139,6 +139,8 @@ The following options are available:
   },
 
   "map_view": {
+    "title": "Create Track Map",
+    "footer_text": "Forge 1.20.1",
     "initial_dimension": "minecraft:overworld",
     "initial_position": { "x": 0, "z": 0 },
 

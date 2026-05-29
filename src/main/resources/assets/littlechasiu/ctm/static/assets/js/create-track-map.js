@@ -362,6 +362,8 @@ fetch("api/config.json")
       initial_zoom,
       max_zoom,
       min_zoom,
+      title,
+      footer_text,
       zoom_controls,
       signals_on,
     } = view
@@ -396,7 +398,10 @@ fetch("api/config.json")
 
     leftSide = signals_on === "LEFT"
 
-    L.control.coords().addTo(map)
+    L.control.coords({
+      title,
+      footerText: footer_text,
+    }).addTo(map)
     L.control.themeToggle().addTo(map)
 
     startMapUpdates()

@@ -1,6 +1,10 @@
 L.Control.Coords = L.Control.extend({
   options: {
-    position: "bottomright",
+    position: "bottomleft",
+    title: "Create Track Map",
+    footerText: "Forge 1.20.1",
+    idleDelay: 3000,
+    mobileIdleDelay: 2000,
   },
 
   initialize(opts) {
@@ -10,6 +14,14 @@ L.Control.Coords = L.Control.extend({
   _createElement() {
     let el = document.createElement("div")
     el.classList.add("coords-control")
+
+    let titleEl = document.createElement("div")
+    titleEl.classList.add("coords-title")
+    titleEl.innerHTML = this.options.title
+    el.appendChild(titleEl)
+
+    let valuesEl = document.createElement("div")
+    valuesEl.classList.add("coords-values")
 
     let curEl = document.createElement("div")
     curEl.classList.add("cursor-coords")
@@ -23,9 +35,10 @@ L.Control.Coords = L.Control.extend({
     curEl.appendChild(curIcon)
     curEl.appendChild(curX)
     curEl.appendChild(curZ)
-    el.appendChild(curEl)
+    valuesEl.appendChild(curEl)
 
     let ctrEl = document.createElement("div")
+    ctrEl.classList.add("center-coords")
     let ctrIcon = document.createElement("object")
     ctrIcon.classList.add("icon")
     ctrIcon.data = "assets/icons/center.svg"
@@ -36,43 +49,73 @@ L.Control.Coords = L.Control.extend({
     ctrEl.appendChild(ctrIcon)
     ctrEl.appendChild(ctrX)
     ctrEl.appendChild(ctrZ)
-    el.appendChild(ctrEl)
+    valuesEl.appendChild(ctrEl)
+    el.appendChild(valuesEl)
+
+    let mobileRotatorEl = document.createElement("div")
+    mobileRotatorEl.classList.add("coords-mobile-rotator")
+    el.appendChild(mobileRotatorEl)
+
+    let footerEl = document.createElement("div")
+    footerEl.classList.add("coords-footer")
+    footerEl.innerHTML = this.options.footerText
+    el.appendChild(footerEl)
 
     return el
+  },
+
+  _createBackdrop(map) {
+    let backdrop = document.createElement("div")
+    backdrop.classList.add("coords-backdrop")
+    map.getContainer().appendChild(backdrop)
+    this.backdrop = backdrop
   },
 
   onAdd(map) {
     let el = this._createElement()
     this.container = el
+    this._createBackdrop(map)
 
     this.centerX = el.getElementsByClassName("center-x")[0]
     this.centerZ = el.getElementsByClassName("center-z")[0]
     this.cursorX = el.getElementsByClassName("cursor-x")[0]
     this.cursorZ = el.getElementsByClassName("cursor-z")[0]
+    this.values = el.getElementsByClassName("coords-values")[0]
+    this.mobileRotator = el.getElementsByClassName("coords-mobile-rotator")[0]
 
     this.cursor = el.getElementsByClassName("cursor-coords")[0]
+    this.isMobileMedia = window.matchMedia("(max-width: 720px)")
+    this._wakeValuesBound = this._wakeValues.bind(this)
 
     map.on("zoom", this._updateCenterCoords, this)
     map.on("move", this._updateCenterCoords, this)
     map.on("mouseover", this._showCursorCoords, this)
     map.on("mousemove", this._updateCursorCoords, this)
+    map.on("click", this._wakeValues, this)
     map.on("mouseout", this._clearCursorCoords, this)
+    map.getContainer().addEventListener("touchstart", this._wakeValuesBound, { passive: true })
 
     this._updateCenterCoords()
-    this._clearCursorCoords()
-    this._updateWidth(true)
+    this._setRollingNumber(this.cursorX, "--")
+    this._setRollingNumber(this.cursorZ, "--")
+    this._wakeValues()
 
     return el
   },
 
   onRemove(map) {
     document.getElementById("ctm-coords-control").remove()
+    this.backdrop?.remove()
+    window.clearTimeout(this.valuesIdleTimer)
+    this._stopMobileRotator()
 
     map.off("zoom", this._updateCenterCoords, this)
     map.off("move", this._updateCenterCoords, this)
     map.off("mouseover", this._showCursorCoords, this)
     map.off("mousemove", this._updateCursorCoords, this)
+    map.off("click", this._wakeValues, this)
     map.off("mouseout", this._clearCursorCoords, this)
+    map.getContainer().removeEventListener("touchstart", this._wakeValuesBound)
   },
 
   _updateCenterCoords() {
@@ -80,9 +123,8 @@ L.Control.Coords = L.Control.extend({
     const x = Math.round(coords.lng)
     const z = Math.round(coords.lat)
 
-    this.centerX.textContent = x.toString()
-    this.centerZ.textContent = z.toString()
-    this._updateWidth()
+    this._setRollingNumber(this.centerX, x)
+    this._setRollingNumber(this.centerZ, z)
   },
 
   _updateCursorCoords(event) {
@@ -90,30 +132,60 @@ L.Control.Coords = L.Control.extend({
     const x = Math.round(coords.lng)
     const z = Math.round(coords.lat)
 
-    this.cursor.style.display = "block"
-    this.cursorX.textContent = x.toString()
-    this.cursorZ.textContent = z.toString()
-    this._updateWidth()
+    this._wakeValues()
+    this._setRollingNumber(this.cursorX, x)
+    this._setRollingNumber(this.cursorZ, z)
   },
 
   _showCursorCoords() {
-    this.cursor.style.display = "block"
-    this._updateWidth()
+    this._wakeValues()
   },
 
   _clearCursorCoords() {
-    this.cursor.style.display = "none"
-    this.cursorX.textContent = "--"
-    this.cursorZ.textContent = "--"
-    this._updateWidth()
   },
 
-  _measureWidth() {
-    if (!this.container) {
-      return 0
+  _setRollingNumber(el, value) {
+    const nextValue = value.toString()
+    const previousValue = el.dataset.value
+
+    if (previousValue === nextValue) {
+      return
     }
 
-    const clone = this.container.cloneNode(true)
+    if (previousValue === undefined) {
+      el.dataset.value = nextValue
+      this._renderStaticNumber(el, nextValue)
+      this._syncNumberWidth(el, nextValue)
+      return
+    }
+
+    el._rollingVersion = (el._rollingVersion ?? 0) + 1
+    const version = el._rollingVersion
+    const currentWidth = Math.ceil(el.getBoundingClientRect().width)
+    el.dataset.value = nextValue
+    el.style.width = `${currentWidth}px`
+    el.replaceChildren(...this._createRollingDigits(previousValue, nextValue))
+    this._syncNumberWidth(el, nextValue)
+    window.setTimeout(() => {
+      if (el._rollingVersion !== version) {
+        return
+      }
+
+      this._renderStaticNumber(el, nextValue)
+      this._syncNumberWidth(el, nextValue)
+    }, 190)
+  },
+
+  _syncNumberWidth(el, value = null) {
+    window.cancelAnimationFrame(el._widthRaf)
+    el._widthRaf = window.requestAnimationFrame(() => {
+      const targetWidth = value === null ? this._measureNumberWidth(el) : this._measureStaticNumberWidth(el, value)
+      el.style.width = `${targetWidth}px`
+    })
+  },
+
+  _measureNumberWidth(el) {
+    const clone = el.cloneNode(true)
     clone.style.position = "absolute"
     clone.style.visibility = "hidden"
     clone.style.pointerEvents = "none"
@@ -128,28 +200,146 @@ L.Control.Coords = L.Control.extend({
     return width
   },
 
-  _updateWidth(skipTransition = false) {
-    if (!this.container) {
+  _measureStaticNumberWidth(el, value) {
+    const clone = el.cloneNode(false)
+    clone.style.position = "absolute"
+    clone.style.visibility = "hidden"
+    clone.style.pointerEvents = "none"
+    clone.style.width = "max-content"
+    clone.style.transition = "none"
+    clone.style.left = "-9999px"
+    clone.style.bottom = "0"
+    this._renderStaticNumber(clone, value)
+    document.body.appendChild(clone)
+    const width = Math.ceil(clone.getBoundingClientRect().width)
+    clone.remove()
+
+    return width
+  },
+
+  _renderStaticNumber(el, value) {
+    el.replaceChildren(
+      ...Array.from(value, (char) => {
+        const digit = document.createElement("span")
+        digit.classList.add("coords-digit")
+        digit.textContent = char
+        return digit
+      }),
+    )
+  },
+
+  _createRollingDigits(previousValue, nextValue) {
+    const length = Math.max(previousValue.length, nextValue.length)
+    const previous = previousValue.padStart(length, " ")
+    const next = nextValue.padStart(length, " ")
+
+    return Array.from(next, (nextChar, index) => {
+      const previousChar = previous[index]
+      const digit = document.createElement("span")
+      digit.classList.add("coords-digit")
+
+      if (previousChar === nextChar) {
+        digit.textContent = nextChar
+        return digit
+      }
+
+      digit.classList.add("coords-digit-rolling")
+
+      const oldDigit = document.createElement("span")
+      oldDigit.classList.add("coords-digit-old")
+      oldDigit.textContent = previousChar
+
+      const newDigit = document.createElement("span")
+      newDigit.classList.add("coords-digit-new")
+      newDigit.textContent = nextChar
+
+      digit.appendChild(oldDigit)
+      digit.appendChild(newDigit)
+      digit.addEventListener(
+        "animationend",
+        () => {
+          digit.classList.remove("coords-digit-rolling")
+          digit.textContent = nextChar
+        },
+        { once: true },
+      )
+
+      return digit
+    })
+  },
+
+  _wakeValues() {
+    this._setValuesIdle(false)
+    this._scheduleValuesIdle()
+  },
+
+  _scheduleValuesIdle() {
+    window.clearTimeout(this.valuesIdleTimer)
+    this.valuesIdleTimer = window.setTimeout(() => {
+      this._setValuesIdle(true)
+    }, this._getIdleDelay())
+  },
+
+  _setValuesIdle(isIdle) {
+    if (!this.values) {
       return
     }
 
-    window.requestAnimationFrame(() => {
-      const targetWidth = this._measureWidth()
-      if (!targetWidth) {
-        return
-      }
+    this.values.classList.toggle("coords-values-idle", isIdle)
+    this.container.classList.toggle("coords-mobile-rotator-active", isIdle)
 
-      if (skipTransition) {
-        this.container.style.setProperty("--ctm-coords-width", `${targetWidth}px`)
-        return
-      }
+    if (isIdle) {
+      this._startMobileRotator()
+    } else {
+      this._stopMobileRotator()
+    }
+  },
 
-      const currentWidth = Math.ceil(this.container.getBoundingClientRect().width)
-      this.container.style.setProperty("--ctm-coords-width", `${currentWidth}px`)
-      window.requestAnimationFrame(() => {
-        this.container.style.setProperty("--ctm-coords-width", `${targetWidth}px`)
-      })
-    })
+  _getIdleDelay() {
+    return this._isMobile() ? this.options.mobileIdleDelay : this.options.idleDelay
+  },
+
+  _isMobile() {
+    return this.isMobileMedia?.matches ?? false
+  },
+
+  _startMobileRotator() {
+    if (!this._isMobile() || !this.mobileRotator) {
+      return
+    }
+
+    this.mobileRotatorItems = [this.options.title, this.options.footerText].filter(Boolean)
+    if (!this.mobileRotatorItems.length) {
+      return
+    }
+
+    this.mobileRotatorIndex = 0
+    this._renderMobileRotator()
+    if (this.mobileRotatorItems.length < 2) {
+      return
+    }
+
+    window.clearInterval(this.mobileRotatorTimer)
+    this.mobileRotatorTimer = window.setInterval(() => {
+      this.mobileRotatorIndex = (this.mobileRotatorIndex + 1) % this.mobileRotatorItems.length
+      this._renderMobileRotator()
+    }, 2000)
+  },
+
+  _stopMobileRotator() {
+    window.clearInterval(this.mobileRotatorTimer)
+    this.mobileRotatorTimer = null
+  },
+
+  _renderMobileRotator() {
+    if (!this.mobileRotator || !this.mobileRotatorItems?.length) {
+      return
+    }
+
+    this.mobileRotator.classList.remove("coords-mobile-rotator-changing")
+    void this.mobileRotator.offsetWidth
+    this.mobileRotator.innerHTML = this.mobileRotatorItems[this.mobileRotatorIndex]
+    this.mobileRotator.classList.add("coords-mobile-rotator-changing")
   },
 })
 
