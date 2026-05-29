@@ -39,7 +39,7 @@ data class IconColors(
 @OptIn(ExperimentalSerializationApi::class)
 data class Colors(
   @EncodeDefault
-  val background: String = "#888",
+  val background: String = "#36373a",
   @EncodeDefault
   val track: TrackColors = TrackColors(),
   @EncodeDefault

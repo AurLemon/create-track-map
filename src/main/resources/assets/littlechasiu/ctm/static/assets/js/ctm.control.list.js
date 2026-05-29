@@ -23,15 +23,6 @@ L.Control.List = L.Control.extend({
     L.DomEvent.disableClickPropagation(container)
     L.DomEvent.disableScrollPropagation(container)
 
-    L.DomEvent.on(
-      container,
-      {
-        mouseenter: this._expand,
-        mouseleave: this._collapse,
-      },
-      this
-    )
-
     const btn = (this._button = document.createElement("a"))
     btn.classList.add(this.options.toggleClassName, "leaflet-control-toggle")
     btn.href = "#"
@@ -43,11 +34,14 @@ L.Control.List = L.Control.extend({
       btn,
       {
         keydown(e) {
-          if (e.code === "Enter") this._expand()
+          if (e.code === "Enter" || e.code === "Space") {
+            L.DomEvent.preventDefault(e)
+            this._toggle()
+          }
         },
         click(e) {
           L.DomEvent.preventDefault(e)
-          this._expand()
+          this._toggle()
         },
       },
       this
@@ -56,6 +50,21 @@ L.Control.List = L.Control.extend({
     const list = (this._body = document.createElement("section"))
     list.classList.add("leaflet-control-body")
     container.appendChild(list)
+
+    const filterWrap = (this._filterWrap = document.createElement("div"))
+    filterWrap.classList.add("ctm-list-filter")
+
+    const filterInput = (this._filterInput = document.createElement("input"))
+    filterInput.type = "search"
+    filterInput.placeholder = this.options.filterPlaceholder || "筛选"
+    filterInput.autocomplete = "off"
+    filterWrap.appendChild(filterInput)
+    list.appendChild(filterWrap)
+
+    filterInput.addEventListener("input", (e) => {
+      this._filterQuery = e.target.value.trim().toLowerCase()
+      this._applyFilter()
+    })
 
     const listDiv = (this._list = document.createElement("div"))
     listDiv.classList.add(this.options.listClassName)
@@ -76,12 +85,15 @@ L.Control.List = L.Control.extend({
     el.dataset.coords = this.options.coordsFunction(info).join(";")
 
     el.addEventListener("click", (e) => {
+      this._setActiveItem(e.currentTarget)
       let [dimension, x, _, z] = e.target.dataset.coords.split(";")
       this.options.layerManager.switchToDimension(dimension)
       this._map.panTo([parseFloat(z), parseFloat(x)])
     })
 
     this._list.appendChild(el)
+    this._applyFilter()
+    this._notifySizeChange()
   },
 
   update(id, info) {
@@ -94,6 +106,8 @@ L.Control.List = L.Control.extend({
       el.textContent = info.name
       el.dataset.coords = this.options.coordsFunction(info).join(";")
     }
+    this._applyFilter()
+    this._notifySizeChange()
   },
 
   remove(id) {
@@ -105,26 +119,29 @@ L.Control.List = L.Control.extend({
     if (!!el) {
       el.remove()
     }
+    this._notifySizeChange()
   },
 
   reorder() {
     Array.from(this._list.children)
       .sort((a, b) => (a.textContent > b.textContent ? 1 : -1))
       .forEach((node) => this._list.appendChild(node))
+    this._applyFilter()
+    this._notifySizeChange()
   },
 
   _expand() {
     L.DomEvent.on(this._body, "click", L.DomEvent.preventDefault)
 
     this._container.classList.add("leaflet-control-expanded")
-    this._body.style.height = null
+    this._button.setAttribute("aria-pressed", "true")
 
-    const acceptableHeight = this._map.getSize().y - (this._container.offsetTop + 50)
-    if (acceptableHeight < this._body.clientHeight) {
-      this._body.classList.add("leaflet-control-scrollbar")
-      this._body.style.height = `${acceptableHeight}px`
-    } else {
-      this._body.classList.remove("leaflet-control-scrollbar")
+    this._setBodyMaxHeight()
+
+    this._updateScrollbar()
+
+    if (typeof this.options.onExpand === "function") {
+      this.options.onExpand(this)
     }
 
     setTimeout(() => {
@@ -134,6 +151,127 @@ L.Control.List = L.Control.extend({
 
   _collapse() {
     this._container.classList.remove("leaflet-control-expanded")
+    this._button.setAttribute("aria-pressed", "false")
+    this._container.style.marginBottom = ""
+
+    if (typeof this.options.onCollapse === "function") {
+      this.options.onCollapse(this)
+    }
+  },
+
+  _toggle() {
+    if (this._container.classList.contains("leaflet-control-expanded")) {
+      this._collapse()
+    } else {
+      this._expand()
+    }
+  },
+
+  _setBodyMaxHeight() {
+    if (!this._map || !this._body || !this._container) {
+      return
+    }
+
+    const mapRect = this._map.getContainer().getBoundingClientRect()
+    const controlRect = this._container.getBoundingClientRect()
+    const bottom = Math.min(window.innerHeight, mapRect.bottom)
+    const maxHeight = Math.max(120, bottom - controlRect.top - 16)
+
+    this._body.style.maxHeight = `${Math.floor(maxHeight)}px`
+  },
+
+  setMaxHeight(height) {
+    if (!this._body) {
+      return
+    }
+
+    const safeHeight = Math.max(120, height)
+    this._body.style.maxHeight = `${Math.floor(safeHeight)}px`
+    this._updateScrollbar()
+  },
+
+  _updateScrollbar() {
+    if (!this._body) {
+      return
+    }
+
+    if (this._body.clientHeight < this._body.scrollHeight) {
+      this._body.classList.add("leaflet-control-scrollbar")
+    } else {
+      this._body.classList.remove("leaflet-control-scrollbar")
+    }
+  },
+
+  isExpanded() {
+    return !!this._container?.classList.contains("leaflet-control-expanded")
+  },
+
+  expand() {
+    if (!this.isExpanded()) {
+      this._expand()
+    }
+  },
+
+  collapse() {
+    if (this.isExpanded()) {
+      this._collapse()
+    }
+  },
+
+  getContainer() {
+    return this._container
+  },
+
+  getBody() {
+    return this._body
+  },
+
+  _applyFilter() {
+    if (!this._list) {
+      return
+    }
+
+    const query = (this._filterQuery || "").toLowerCase()
+    Array.from(this._list.children).forEach((item) => {
+      const text = (item.textContent || "").toLowerCase()
+      item.style.display = !query || text.includes(query) ? "" : "none"
+    })
+    this._notifySizeChange()
+  },
+
+  _notifySizeChange() {
+    if (!this.isExpanded()) {
+      return
+    }
+
+    if (typeof this.options.onSizeChange === "function") {
+      this.options.onSizeChange(this)
+    }
+  },
+
+  _setActiveItem(item) {
+    if (!item || !this._list) {
+      return
+    }
+
+    if (this._activeTimer) {
+      clearTimeout(this._activeTimer)
+      this._activeTimer = null
+    }
+
+    if (this._activeItem) {
+      this._activeItem.classList.remove("ctm-list-item-active")
+    }
+
+    this._activeItem = item
+    this._activeItem.classList.add("ctm-list-item-active")
+    this._activeTimer = setTimeout(() => {
+      if (this._activeItem) {
+        this._activeItem.classList.remove("ctm-list-item-active")
+      }
+      this._activeItem = null
+      this._activeTimer = null
+    }, 1000)
   },
 })
 
@@ -144,7 +282,8 @@ L.control.trainList = (layerManager) =>
     toggleClassName: "leaflet-control-train-list-toggle",
     listClassName: "ctm-train-list",
     itemClassName: "train",
-    tooltip: "Trains",
+    tooltip: "列车",
+    filterPlaceholder: "筛选列车",
     coordsFunction: (t) => {
       const c = t.cars[0].leading
       return [c.dimension, c.location.x, c.location.y, c.location.z]
@@ -157,7 +296,8 @@ L.control.stationList = (layerManager) =>
     toggleClassName: "leaflet-control-station-list-toggle",
     listClassName: "ctm-station-list",
     itemClassName: "station",
-    tooltip: "Stations",
+    tooltip: "车站",
+    filterPlaceholder: "筛选车站",
     coordsFunction: (s) => [s.dimension, s.location.x, s.location.y, s.location.z],
     layerManager,
   })
