@@ -146,7 +146,7 @@ class LayerManager {
 
     const mapRect = this.map.getContainer().getBoundingClientRect()
     const controlRect = container.getBoundingClientRect()
-    const bottom = Math.min(window.innerHeight, mapRect.bottom)
+    const bottom = Math.min(window.innerHeight, mapRect.bottom) - 72
     const maxHeight = Math.max(120, bottom - controlRect.top - 16)
 
     list.style.maxHeight = `${Math.floor(maxHeight)}px`

@@ -174,7 +174,7 @@ L.Control.List = L.Control.extend({
 
     const mapRect = this._map.getContainer().getBoundingClientRect()
     const controlRect = this._container.getBoundingClientRect()
-    const bottom = Math.min(window.innerHeight, mapRect.bottom)
+    const bottom = Math.min(window.innerHeight, mapRect.bottom) - 72
     const maxHeight = Math.max(120, bottom - controlRect.top - 16)
 
     this._body.style.maxHeight = `${Math.floor(maxHeight)}px`

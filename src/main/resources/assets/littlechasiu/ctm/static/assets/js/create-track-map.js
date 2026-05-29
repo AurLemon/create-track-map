@@ -145,6 +145,7 @@ function setSatelliteDimension(dimension) {
 function setupControlStacking(mapInstance, layerManager, trainManager, stationManager) {
   const minHeight = 120
   const gap = 8
+  const bottomHudOffset = 72
   let isUpdating = false
   let lastOpenedId = null
 
@@ -185,7 +186,7 @@ function setupControlStacking(mapInstance, layerManager, trainManager, stationMa
     isUpdating = true
 
     const mapRect = mapInstance.getContainer().getBoundingClientRect()
-    const mapBottom = Math.min(window.innerHeight, mapRect.bottom)
+    const mapBottom = Math.min(window.innerHeight, mapRect.bottom) - bottomHudOffset
 
     const getBodyHeight = (item) => {
       const body = item.getBody()
@@ -367,6 +368,7 @@ fetch("api/config.json")
       zoom_controls,
       signals_on,
     } = view
+    document.title = title || "Create Track Map"
 
     satelliteMaps = satellite_maps || {}
     const satelliteOptions = getSatelliteConfig(initial_dimension)

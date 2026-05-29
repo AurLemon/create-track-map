@@ -87,10 +87,11 @@ class Server {
   }
 
   private suspend inline fun <reified T> ApplicationCall.respondJSON(obj: T) {
+    val jsonContentType = ContentType.Application.Json.withCharset(Charsets.UTF_8)
     if (request.queryParameters.contains("pretty"))
-      respondText(jsonPretty.encodeToString(obj))
+      respondText(jsonPretty.encodeToString(obj), jsonContentType)
     else
-      respondText(Json.encodeToString(obj))
+      respondText(Json.encodeToString(obj), jsonContentType)
   }
 
   private suspend inline fun <reified T> ApplicationCall.respondSSE(
@@ -104,7 +105,7 @@ class Server {
   }
 
   private suspend inline fun ApplicationCall.respondCSS(builder: CssBuilder.() -> Unit) {
-    respondText(CssBuilder().apply(builder).toString(), ContentType.Text.CSS)
+    respondText(CssBuilder().apply(builder).toString(), ContentType.Text.CSS.withCharset(Charsets.UTF_8))
   }
 
   private fun CssBuilder.variables(vararg pairs: Pair<String, CssValue>) {
@@ -126,9 +127,9 @@ class Server {
         return mapOf(
           "png" to ContentType.Image.PNG,
           "svg" to ContentType.Image.SVG,
-          "js" to ContentType.Application.JavaScript,
-          "css" to ContentType.Text.CSS,
-          "html" to ContentType.Text.Html
+          "js" to ContentType.Application.JavaScript.withCharset(Charsets.UTF_8),
+          "css" to ContentType.Text.CSS.withCharset(Charsets.UTF_8),
+          "html" to ContentType.Text.Html.withCharset(Charsets.UTF_8)
         ).getOrDefault(path.extension, ContentType.Application.OctetStream)
       }
       TrackMap.javaClass.getResource("/assets/littlechasiu/ctm/static")?.toURI()
@@ -176,9 +177,9 @@ class Server {
       get("/api/injection.css") {
         val path = injectionCssPath
         if (path != null && Files.exists(path)) {
-          call.respondText(Files.readString(path), ContentType.Text.CSS)
+          call.respondText(Files.readString(path), ContentType.Text.CSS.withCharset(Charsets.UTF_8))
         } else {
-          call.respondText("", ContentType.Text.CSS)
+          call.respondText("", ContentType.Text.CSS.withCharset(Charsets.UTF_8))
         }
       }
 

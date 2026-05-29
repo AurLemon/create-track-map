@@ -498,7 +498,7 @@ body.ctm-dark #map {
   right: var(--ctm-control-menu-offset);
   min-width: 180px;
   max-width: min(280px, calc(100vw - 76px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(100vh - 104px);
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px;
