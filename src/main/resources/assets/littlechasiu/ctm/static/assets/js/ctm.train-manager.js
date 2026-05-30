@@ -1,8 +1,8 @@
 class TrainManager {
-  constructor(map, layerManager) {
+  constructor(map, layerManager, opts = {}) {
     this.trains = new Set()
     this.map = map
-    this.control = L.control.trainList(layerManager).addTo(map)
+    this.control = L.control.trainList(layerManager, opts).addTo(map)
   }
 
   update(trains) {

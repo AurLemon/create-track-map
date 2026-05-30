@@ -103,8 +103,73 @@ L.DynmapLayer = L.TileLayer.extend({
 
 L.dynmapLayer = (options) => new L.DynmapLayer(options)
 
+let selectTrain = () => {}
+let toggleFollowTrain = () => {}
+
+function formatCoord(value) {
+  return Number.isFinite(value) ? Math.round(value).toString() : "?"
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
+function formatTrainPoint(point) {
+  if (!point) {
+    return "坐标未知"
+  }
+
+  return `${formatCoord(point.x)}, ${formatCoord(point.y)}, ${formatCoord(point.z)}`
+}
+
+function firstTrainLocation(train) {
+  const car = train.cars[0]
+  return car?.leading?.location || car?.trailing?.location || null
+}
+
+function trainDirectionLabel(train) {
+  return train.backwards ? "反向行驶" : "正向行驶"
+}
+
+function trainStatusLabel(train) {
+  return train.stopped ? "已停车" : "运行中"
+}
+
+function trainDetailsHtml(train) {
+  const point = firstTrainLocation(train)
+  const name = escapeHtml(train.name)
+  return [
+    `<div>列车名：${name}</div>`,
+    `<div>车辆数量：${train.cars.length}</div>`,
+    `<div>运行状态：${trainStatusLabel(train)}</div>`,
+    `<div>行驶方向：${trainDirectionLabel(train)}</div>`,
+    `<div>当前坐标：${formatTrainPoint(point)}</div>`,
+  ].join("")
+}
+
+function trainTooltipHtml(train, carIndex) {
+  const title =
+    train.cars.length === 1
+      ? escapeHtml(train.name)
+      : `${escapeHtml(train.name)} <span class="car-number">${carIndex + 1}</span>`
+
+  return [
+    `<div>${title}</div>`,
+    `<div class="train-tooltip-meta">${trainDirectionLabel(train)}</div>`,
+  ].join("")
+}
+
 const lmgr = new LayerManager(map)
-const tmgr = new TrainManager(map, lmgr)
+const tmgr = new TrainManager(map, lmgr, {
+  onSelect: (id) => selectTrain(id, "list"),
+  onDoubleSelect: (id) => toggleFollowTrain(id, "list"),
+  detailsFunction: trainDetailsHtml,
+})
 const smgr = new StationManager(map, lmgr)
 
 let satelliteLayer = null
@@ -356,7 +421,7 @@ let leftSide = false
 fetch("api/config.json")
   .then((resp) => resp.json())
   .then((cfg) => {
-    const { layers, view, dimensions, satellite_maps } = cfg
+    const { layers, view, dimensions, satellite_maps, api_base_url } = cfg
     const {
       initial_dimension,
       initial_position,
@@ -406,11 +471,11 @@ fetch("api/config.json")
     }).addTo(map)
     L.control.themeToggle().addTo(map)
 
-    startMapUpdates()
+    startMapUpdates(api_base_url)
   })
 
-function startMapUpdates() {
-  const dmgr = new DataManager()
+function startMapUpdates(apiBaseUrl) {
+  const dmgr = new DataManager(apiBaseUrl)
 
   const tracks = new Map()
   const portals = new Map()
@@ -426,6 +491,9 @@ function startMapUpdates() {
   const blockLayers = new Map()
   const signalLayers = new Map()
   const trainLayers = new Map()
+  let selectedTrain = null
+  let followTrainId = null
+  let temporarySelectTimer = null
 
   function removeLayerRecords(cache, id) {
     const records = cache.get(id) || []
@@ -442,6 +510,173 @@ function startMapUpdates() {
     records.forEach(({ parent, layer }) => layer.addTo(parent))
     cache.set(id, records)
   }
+
+  function clearTemporarySelectTimer() {
+    if (temporarySelectTimer) {
+      clearTimeout(temporarySelectTimer)
+      temporarySelectTimer = null
+    }
+  }
+
+  function trainCarAnchor(train, carIndex = 0) {
+    const car = train.cars[carIndex] || train.cars[0]
+    const leading = car?.leading
+    const trailing = car?.trailing
+    const dimension = leading?.dimension || trailing?.dimension
+    let location = leading?.location || trailing?.location
+
+    if (leading?.location && trailing?.location && leading.dimension === trailing.dimension) {
+      location = {
+        x: (leading.location.x + trailing.location.x) / 2,
+        y: (leading.location.y + trailing.location.y) / 2,
+        z: (leading.location.z + trailing.location.z) / 2,
+      }
+    }
+
+    if (!location || !dimension) {
+      return null
+    }
+
+    return { dimension, position: xz(location) }
+  }
+
+  function panToTrain(id, carIndex = 0) {
+    const train = trains.get(id)
+    const anchor = train ? trainCarAnchor(train, carIndex) : null
+    if (!anchor) {
+      return
+    }
+
+    lmgr.switchToDimension(anchor.dimension)
+    map.panTo(anchor.position, {
+      animate: true,
+      duration: 0.45,
+      easeLinearity: 0.25,
+    })
+  }
+
+  function syncSelectedTrain() {
+    if (!selectedTrain) {
+      return
+    }
+
+    const records = trainLayers.get(selectedTrain.id) || []
+    records.forEach(({ layer, carIndex }) => {
+      if (carIndex !== selectedTrain.carIndex) {
+        return
+      }
+
+      if (layer.getElement) {
+        const element = layer.getElement()
+        element?.classList.add("selected-train")
+      }
+
+      if (layer.openTooltip) {
+        layer.openTooltip()
+      }
+    })
+  }
+
+  function rerenderTrain(id) {
+    const train = trains.get(id)
+    if (train) {
+      renderTrain(train)
+    }
+  }
+
+  function setSelectedTrain(id, carIndex = 0, temporary = false) {
+    const previousTrainId = selectedTrain?.id
+    clearTemporarySelectTimer()
+    selectedTrain = { id, carIndex }
+
+    if (previousTrainId && previousTrainId !== id) {
+      rerenderTrain(previousTrainId)
+    }
+
+    rerenderTrain(id)
+
+    if (temporary) {
+      temporarySelectTimer = setTimeout(() => {
+        clearSelectedTrain()
+      }, 3000)
+    }
+  }
+
+  function showTemporaryTrain(id, carIndex = 0, expandList = false) {
+    if (followTrainId) {
+      clearFollowTrain()
+    }
+
+    if (expandList) {
+      tmgr.control.setExpandedItem(id)
+    } else {
+      tmgr.control.clearExpandedItem()
+      tmgr.control.clearActiveItem()
+    }
+
+    setSelectedTrain(id, carIndex, true)
+    if (expandList) {
+      panToTrain(id, carIndex)
+    }
+  }
+
+  function clearFollowTrain() {
+    followTrainId = null
+    tmgr.control.clearActiveItem()
+  }
+
+  selectTrain = (id, source = "map", carIndex = 0) => {
+    if (source === "list" && followTrainId === id) {
+      clearFollowTrain()
+      tmgr.control.clearExpandedItem()
+      clearSelectedTrain()
+      return
+    }
+
+    showTemporaryTrain(id, source === "list" ? 0 : carIndex, source === "list")
+  }
+
+  toggleFollowTrain = (id, source = "list", carIndex = 0) => {
+    if (followTrainId === id) {
+      clearFollowTrain()
+      tmgr.control.clearExpandedItem()
+      clearSelectedTrain()
+      return
+    }
+
+    followTrainId = id
+    setSelectedTrain(id, source === "list" ? 0 : carIndex)
+    if (source === "list") {
+      tmgr.control.setExpandedItem(id)
+      tmgr.control.setPersistentActive(id)
+    } else {
+      tmgr.control.clearExpandedItem()
+      tmgr.control.clearActiveItem()
+    }
+    followSelectedTrain()
+  }
+
+  function followSelectedTrain() {
+    if (!followTrainId) {
+      return
+    }
+
+    const carIndex = selectedTrain?.id === followTrainId ? selectedTrain.carIndex : 0
+    panToTrain(followTrainId, carIndex)
+  }
+
+  function clearSelectedTrain() {
+    const previousTrainId = selectedTrain?.id
+    clearTemporarySelectTimer()
+    selectedTrain = null
+    tmgr.control.clearExpandedItem()
+    clearFollowTrain()
+    if (previousTrainId) {
+      rerenderTrain(previousTrainId)
+    }
+  }
+
+  map.on("click", clearSelectedTrain)
 
   function trackLayer({ path }) {
     if (path.length === 4) {
@@ -571,6 +806,8 @@ function startMapUpdates() {
   function trainLayersFor(train) {
     const records = []
     let leadCar = null
+    const selected = selectedTrain?.id === train.id
+    const selectedCarIndex = selected ? selected.carIndex : null
     if (!train.stopped) {
       leadCar = train.backwards ? train.cars.length - 1 : 0
     }
@@ -584,24 +821,47 @@ function startMapUpdates() {
         : [[car.leading.dimension, [xz(car.leading.location), xz(car.trailing.location)]]]
 
       parts.forEach(([dim, part]) => {
+        if (selectedCarIndex === i) {
+          records.push({
+            parent: lmgr.layer(dim, "trains"),
+            carIndex: i,
+            layer: L.polyline(part, {
+              weight: 18,
+              lineCap: "square",
+              className: "selected-train-frame",
+              interactive: false,
+              pane: "trains",
+            }),
+          })
+        }
+
         records.push({
           parent: lmgr.layer(dim, "trains"),
+          carIndex: i,
           layer: L.polyline(part, {
             weight: 12,
             lineCap: "square",
-            className: "train" + (leadCar === i ? " lead-car" : ""),
+            className:
+              "train" + (leadCar === i ? " lead-car" : "") + (selectedCarIndex === i ? " selected-train" : ""),
             pane: "trains",
-          }).bindTooltip(
-            train.cars.length === 1
-              ? train.name
-              : `${train.name} <span class="car-number">${i + 1}</span>`,
-            {
-              className: "train-name",
-              direction: "right",
-              offset: L.point(12, 0),
-              opacity: 0.7,
-            }
-          ),
+          })
+            .bindTooltip(
+              trainTooltipHtml(train, i),
+              {
+                className: "train-name",
+                direction: "right",
+                offset: L.point(12, 0),
+                opacity: 0.7,
+              }
+            )
+            .on("click", (e) => {
+              L.DomEvent.stop(e.originalEvent)
+              selectTrain(train.id, "map", i)
+            })
+            .on("dblclick", (e) => {
+              L.DomEvent.stop(e.originalEvent)
+              toggleFollowTrain(train.id, "map", i)
+            }),
         })
       })
 
@@ -612,10 +872,17 @@ function startMapUpdates() {
 
         records.push({
           parent: lmgr.layer(dim, "trains"),
+          carIndex: i,
           layer: L.marker(head, {
             icon: headIcon,
             rotationAngle: angle,
             pane: "trains",
+          }).on("click", (e) => {
+            L.DomEvent.stop(e.originalEvent)
+            selectTrain(train.id, "map", i)
+          }).on("dblclick", (e) => {
+            L.DomEvent.stop(e.originalEvent)
+            toggleFollowTrain(train.id, "map", i)
           }),
         })
       }
@@ -627,6 +894,12 @@ function startMapUpdates() {
   function renderTrain(train) {
     trains.set(train.id, train)
     setLayerRecords(trainLayers, train.id, trainLayersFor(train))
+    if (selectedTrain?.id === train.id) {
+      syncSelectedTrain()
+    }
+    if (followTrainId === train.id) {
+      followSelectedTrain()
+    }
   }
 
   function updateTrains() {
@@ -715,6 +988,12 @@ function startMapUpdates() {
       trains.clear()
       clearLayerRecords(trainLayers)
       message.trains.forEach(renderTrain)
+      if (selectedTrain && !trains.has(selectedTrain.id)) {
+        selectedTrain = null
+      }
+      if (followTrainId && !trains.has(followTrainId)) {
+        clearFollowTrain()
+      }
       updateTrains()
       return
     }
@@ -722,6 +1001,12 @@ function startMapUpdates() {
     message.remove.forEach((id) => {
       trains.delete(id)
       removeLayerRecords(trainLayers, id)
+      if (selectedTrain?.id === id) {
+        selectedTrain = null
+      }
+      if (followTrainId === id) {
+        clearFollowTrain()
+      }
     })
     message.upsert.forEach(renderTrain)
     updateTrains()

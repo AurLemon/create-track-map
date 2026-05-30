@@ -158,6 +158,8 @@ data class SatelliteMapConfig(
 @Serializable
 data class MapConfig(
   val view: MapView,
+  @SerialName("api_base_url")
+  val apiBaseUrl: String,
   val dimensions: Map<String, DimensionConfig>,
   val layers: Map<String, LayerConfig>,
   @SerialName("satellite_maps")
@@ -175,6 +177,9 @@ data class Config @OptIn(ExperimentalSerializationApi::class) constructor(
   @SerialName("server_port")
   @EncodeDefault
   val serverPort: Int = 3876,
+  @SerialName("api_base_url")
+  @EncodeDefault
+  val apiBaseUrl: String = "",
 
   @SerialName("map_style")
   @EncodeDefault

@@ -194,12 +194,12 @@ class TrackWatcher() {
         )
   }
 
-  private var nodes = mutableSetOf<TrackNode>()
-  private var edges = mutableSetOf<TrackEdge>()
-  private var signals = mutableSetOf<CreateSignal>()
-  private var stations = mutableSetOf<CreateStation>()
-  private var trains = mutableSetOf<Train>()
-  private var blocks = mutableMapOf<UUID, CreateSignalBlock>()
+  @Volatile private var nodes = setOf<TrackNode>()
+  @Volatile private var edges = setOf<TrackEdge>()
+  @Volatile private var signals = setOf<CreateSignal>()
+  @Volatile private var stations = setOf<CreateStation>()
+  @Volatile private var trains = setOf<Train>()
+  @Volatile private var blocks = mapOf<UUID, CreateSignalBlock>()
 
   fun portalsInBlock(block: UUID): Collection<Portal> =
     blocks[block]?.portals ?: listOf()
@@ -461,10 +461,10 @@ class TrackWatcher() {
       }
     }
 
-    nodes.replaceWith(thisNodes)
-    edges.replaceWith(thisEdges)
-    signals.replaceWith(thisSignals)
-    stations.replaceWith(thisStations)
+    nodes = thisNodes
+    edges = thisEdges
+    signals = thisSignals
+    stations = thisStations
 
     // Signal blocks / track occupancy
     val thisBlocks = mutableMapOf<UUID, CreateSignalBlock>()
@@ -542,11 +542,10 @@ class TrackWatcher() {
         }
       }
     }
-    blocks.clear()
-    blocks.putAll(thisBlocks)
+    blocks = thisBlocks
 
     // Trains
-    trains.replaceWith(RR.trains.values)
+    trains = RR.trains.values.toSet()
 
     val currentNetwork = network
     val currentSignalStatus = signalStatus

@@ -106,6 +106,10 @@ The following options are available:
   "watch_interval_seconds": 0.5,
   // The port the internal web server listens on.
   "server_port": 3876,
+  // Optional backend origin for real-time API requests.
+  // Leave empty to use the same origin as the page.
+  // Example: "https://track.api.hydcraft.cn"
+  "api_base_url": "",
 
   "map_style": {
     // Font to use for the map's UI. Must be a valid CSS font stack.

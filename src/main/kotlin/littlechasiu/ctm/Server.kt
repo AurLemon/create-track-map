@@ -31,6 +31,7 @@ class Server {
 
   var enable: Boolean = true
   var port: Int = 3876
+  var apiBaseUrl: String = ""
   var mapStyle = MapStyle()
   var mapView = MapView()
   var dimensions = mapOf(
@@ -116,7 +117,7 @@ class Server {
 
   private val mapConfig: MapConfig
     get() =
-      MapConfig(mapView, dimensions, layers, satelliteMaps)
+      MapConfig(mapView, apiBaseUrl, dimensions, layers, satelliteMaps)
 
   private fun Application.module() {
     routing {

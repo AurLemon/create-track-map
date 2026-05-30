@@ -91,6 +91,12 @@ body.ctm-dark #map {
   background-color: #444;
   color: white;
 }
+.train-tooltip-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.82;
+}
 
 .station-icon .fill {
   fill: var(--station-color);
@@ -124,6 +130,12 @@ body.ctm-dark #map {
 }
 .train.lead-car {
   stroke: var(--lead-car-color);
+}
+.selected-train-frame {
+  stroke: rgba(16, 22, 26, 0.92);
+}
+.train.selected-train {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
 }
 .head-icon path {
   fill: var(--lead-car-color);
@@ -674,8 +686,38 @@ body.ctm-dark #map {
   padding: 0 5px;
   margin-top: 2px;
   text-overflow: ellipsis;
+  transition:
+    background-color var(--ctm-transition-fast),
+    padding var(--ctm-transition-fast);
+}
+.ctm-list-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background-color var(--ctm-transition-fast);
+}
+.ctm-list-item-details {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-top: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--ctm-page-text);
+  transition:
+    max-height 220ms ease,
+    opacity 160ms ease,
+    padding-top 220ms ease;
+}
+.ctm-train-list .train.ctm-list-item-expanded {
+  padding-top: 3px;
+  padding-bottom: 5px;
+}
+.ctm-train-list .train.ctm-list-item-expanded .ctm-list-item-details {
+  max-height: 120px;
+  opacity: 1;
+  padding-top: 4px;
 }
 .ctm-station-list .station:hover,
 .ctm-train-list .train:hover {

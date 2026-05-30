@@ -1,9 +1,14 @@
 class DataManager {
-  constructor() {
-    this.networkStream = new EventSource("api/network.rt")
-    this.blockStatusStream = new EventSource("api/blocks.rt")
-    this.signalStatusStream = new EventSource("api/signals.rt")
-    this.trainStatusStream = new EventSource("api/trains.rt")
+  constructor(apiBaseUrl = "") {
+    this.apiBaseUrl = apiBaseUrl.replace(/\/+$/, "")
+    this.networkStream = new EventSource(this.apiUrl("network.rt"))
+    this.blockStatusStream = new EventSource(this.apiUrl("blocks.rt"))
+    this.signalStatusStream = new EventSource(this.apiUrl("signals.rt"))
+    this.trainStatusStream = new EventSource(this.apiUrl("trains.rt"))
+  }
+
+  apiUrl(path) {
+    return this.apiBaseUrl ? `${this.apiBaseUrl}/api/${path}` : `api/${path}`
   }
 
   onTrackStatus(fn) {

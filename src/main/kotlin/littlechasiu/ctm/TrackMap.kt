@@ -109,6 +109,7 @@ object TrackMap {
     server.enable = config.enable
     watcher.watchInterval = config.watchIntervalSeconds.seconds
     server.port = config.serverPort
+    server.apiBaseUrl = config.apiBaseUrl
     server.mapStyle = config.mapStyle
     server.mapView = config.mapView
     server.dimensions = config.dimensions

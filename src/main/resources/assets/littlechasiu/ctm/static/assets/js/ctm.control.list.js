@@ -6,7 +6,12 @@ L.Control.List = L.Control.extend({
     itemClassName: null,
     tooltip: null,
     coordsFunction: null,
+    detailsFunction: null,
     layerManager: null,
+    panOnSelect: true,
+    onSelect: null,
+    onDoubleSelect: null,
+    activeDurationMs: 1000,
   },
 
   initialize(opts) {
@@ -80,15 +85,42 @@ L.Control.List = L.Control.extend({
 
     const el = document.createElement("div")
     el.classList.add(this.options.itemClassName)
-    el.textContent = info.name
     el.dataset.id = id
+    el.dataset.label = info.name
     el.dataset.coords = this.options.coordsFunction(info).join(";")
+
+    const label = document.createElement("div")
+    label.classList.add("ctm-list-item-label")
+    label.textContent = info.name
+    el.appendChild(label)
+
+    if (typeof this.options.detailsFunction === "function") {
+      const details = document.createElement("div")
+      details.classList.add("ctm-list-item-details")
+      details.innerHTML = this.options.detailsFunction(info)
+      details.addEventListener("transitionend", () => this._notifySizeChange())
+      el.appendChild(details)
+    }
 
     el.addEventListener("click", (e) => {
       this._setActiveItem(e.currentTarget)
-      let [dimension, x, _, z] = e.target.dataset.coords.split(";")
-      this.options.layerManager.switchToDimension(dimension)
-      this._map.panTo([parseFloat(z), parseFloat(x)])
+      this._setExpandedItem(e.currentTarget)
+      if (this.options.panOnSelect) {
+        let [dimension, x, _, z] = e.currentTarget.dataset.coords.split(";")
+        this.options.layerManager.switchToDimension(dimension)
+        this._map.panTo([parseFloat(z), parseFloat(x)])
+      }
+      if (typeof this.options.onSelect === "function") {
+        this.options.onSelect(e.currentTarget.dataset.id)
+      }
+    })
+
+    el.addEventListener("dblclick", (e) => {
+      if (typeof this.options.onDoubleSelect === "function") {
+        this._setExpandedItem(e.currentTarget)
+        this._setActiveItem(e.currentTarget, true)
+        this.options.onDoubleSelect(e.currentTarget.dataset.id)
+      }
     })
 
     this._list.appendChild(el)
@@ -103,8 +135,13 @@ L.Control.List = L.Control.extend({
 
     let el = Array.from(this._list.children).filter((e) => e.dataset.id === id)[0]
     if (!!el) {
-      el.textContent = info.name
+      el.dataset.label = info.name
       el.dataset.coords = this.options.coordsFunction(info).join(";")
+      el.querySelector(".ctm-list-item-label").textContent = info.name
+      const details = el.querySelector(".ctm-list-item-details")
+      if (details && typeof this.options.detailsFunction === "function") {
+        details.innerHTML = this.options.detailsFunction(info)
+      }
     }
     this._applyFilter()
     this._notifySizeChange()
@@ -117,6 +154,12 @@ L.Control.List = L.Control.extend({
 
     let el = Array.from(this._list.children).filter((e) => e.dataset.id === id)[0]
     if (!!el) {
+      if (this._activeItem === el) {
+        this._activeItem = null
+      }
+      if (this._expandedItem === el) {
+        this._expandedItem = null
+      }
       el.remove()
     }
     this._notifySizeChange()
@@ -124,7 +167,7 @@ L.Control.List = L.Control.extend({
 
   reorder() {
     Array.from(this._list.children)
-      .sort((a, b) => (a.textContent > b.textContent ? 1 : -1))
+      .sort((a, b) => (a.dataset.label > b.dataset.label ? 1 : -1))
       .forEach((node) => this._list.appendChild(node))
     this._applyFilter()
     this._notifySizeChange()
@@ -233,7 +276,7 @@ L.Control.List = L.Control.extend({
 
     const query = (this._filterQuery || "").toLowerCase()
     Array.from(this._list.children).forEach((item) => {
-      const text = (item.textContent || "").toLowerCase()
+      const text = (item.dataset.label || "").toLowerCase()
       item.style.display = !query || text.includes(query) ? "" : "none"
     })
     this._notifySizeChange()
@@ -249,7 +292,63 @@ L.Control.List = L.Control.extend({
     }
   },
 
-  _setActiveItem(item) {
+  clearActiveItem() {
+    if (this._activeTimer) {
+      clearTimeout(this._activeTimer)
+      this._activeTimer = null
+    }
+
+    if (this._activeItem) {
+      this._activeItem.classList.remove("ctm-list-item-active")
+      this._activeItem = null
+    }
+  },
+
+  clearExpandedItem() {
+    if (this._expandedItem) {
+      this._expandedItem.classList.remove("ctm-list-item-expanded")
+      this._expandedItem = null
+      this._notifySizeChange()
+    }
+  },
+
+  _setExpandedItem(item) {
+    if (!item || !this._list || !item.querySelector(".ctm-list-item-details")) {
+      return
+    }
+
+    if (this._expandedItem && this._expandedItem !== item) {
+      this._expandedItem.classList.remove("ctm-list-item-expanded")
+    }
+
+    this._expandedItem = item
+    this._expandedItem.classList.add("ctm-list-item-expanded")
+    this._notifySizeChange()
+  },
+
+  setExpandedItem(id) {
+    if (!this._list) {
+      return
+    }
+
+    const item = Array.from(this._list.children).filter((e) => e.dataset.id === id)[0]
+    if (item) {
+      this._setExpandedItem(item)
+    }
+  },
+
+  setPersistentActive(id) {
+    if (!this._list) {
+      return
+    }
+
+    const item = Array.from(this._list.children).filter((e) => e.dataset.id === id)[0]
+    if (item) {
+      this._setActiveItem(item, true)
+    }
+  },
+
+  _setActiveItem(item, persistent = false) {
     if (!item || !this._list) {
       return
     }
@@ -265,19 +364,23 @@ L.Control.List = L.Control.extend({
 
     this._activeItem = item
     this._activeItem.classList.add("ctm-list-item-active")
+    if (persistent) {
+      return
+    }
+
     this._activeTimer = setTimeout(() => {
       if (this._activeItem) {
         this._activeItem.classList.remove("ctm-list-item-active")
       }
       this._activeItem = null
       this._activeTimer = null
-    }, 1000)
+    }, this.options.activeDurationMs)
   },
 })
 
 L.control.list = (opts) => new L.Control.List(opts)
 
-L.control.trainList = (layerManager) =>
+L.control.trainList = (layerManager, opts = {}) =>
   L.control.list({
     toggleClassName: "leaflet-control-train-list-toggle",
     listClassName: "ctm-train-list",
@@ -285,10 +388,15 @@ L.control.trainList = (layerManager) =>
     tooltip: "列车",
     filterPlaceholder: "筛选列车",
     coordsFunction: (t) => {
-      const c = t.cars[0].leading
+      const c = t.cars[0].leading || t.cars[0].trailing
       return [c.dimension, c.location.x, c.location.y, c.location.z]
     },
+    detailsFunction: opts.detailsFunction,
     layerManager,
+    panOnSelect: false,
+    onSelect: opts.onSelect,
+    onDoubleSelect: opts.onDoubleSelect,
+    activeDurationMs: 3000,
   })
 
 L.control.stationList = (layerManager) =>
