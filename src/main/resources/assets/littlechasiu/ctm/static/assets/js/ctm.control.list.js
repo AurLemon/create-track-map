@@ -10,7 +10,6 @@ L.Control.List = L.Control.extend({
     layerManager: null,
     panOnSelect: true,
     onSelect: null,
-    onDoubleSelect: null,
     activeDurationMs: 1000,
   },
 
@@ -112,14 +111,6 @@ L.Control.List = L.Control.extend({
       }
       if (typeof this.options.onSelect === "function") {
         this.options.onSelect(e.currentTarget.dataset.id)
-      }
-    })
-
-    el.addEventListener("dblclick", (e) => {
-      if (typeof this.options.onDoubleSelect === "function") {
-        this._setExpandedItem(e.currentTarget)
-        this._setActiveItem(e.currentTarget, true)
-        this.options.onDoubleSelect(e.currentTarget.dataset.id)
       }
     })
 
@@ -337,18 +328,7 @@ L.Control.List = L.Control.extend({
     }
   },
 
-  setPersistentActive(id) {
-    if (!this._list) {
-      return
-    }
-
-    const item = Array.from(this._list.children).filter((e) => e.dataset.id === id)[0]
-    if (item) {
-      this._setActiveItem(item, true)
-    }
-  },
-
-  _setActiveItem(item, persistent = false) {
+  _setActiveItem(item) {
     if (!item || !this._list) {
       return
     }
@@ -364,9 +344,6 @@ L.Control.List = L.Control.extend({
 
     this._activeItem = item
     this._activeItem.classList.add("ctm-list-item-active")
-    if (persistent) {
-      return
-    }
 
     this._activeTimer = setTimeout(() => {
       if (this._activeItem) {
@@ -395,7 +372,6 @@ L.control.trainList = (layerManager, opts = {}) =>
     layerManager,
     panOnSelect: false,
     onSelect: opts.onSelect,
-    onDoubleSelect: opts.onDoubleSelect,
     activeDurationMs: 3000,
   })
 

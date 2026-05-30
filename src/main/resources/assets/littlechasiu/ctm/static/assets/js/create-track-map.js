@@ -104,7 +104,6 @@ L.DynmapLayer = L.TileLayer.extend({
 L.dynmapLayer = (options) => new L.DynmapLayer(options)
 
 let selectTrain = () => {}
-let toggleFollowTrain = () => {}
 
 function formatCoord(value) {
   return Number.isFinite(value) ? Math.round(value).toString() : "?"
@@ -167,7 +166,6 @@ function trainTooltipHtml(train, carIndex) {
 const lmgr = new LayerManager(map)
 const tmgr = new TrainManager(map, lmgr, {
   onSelect: (id) => selectTrain(id, "list"),
-  onDoubleSelect: (id) => toggleFollowTrain(id, "list"),
   detailsFunction: trainDetailsHtml,
 })
 const smgr = new StationManager(map, lmgr)
@@ -492,7 +490,6 @@ function startMapUpdates(apiBaseUrl) {
   const signalLayers = new Map()
   const trainLayers = new Map()
   let selectedTrain = null
-  let followTrainId = null
   let temporarySelectTimer = null
 
   function removeLayerRecords(cache, id) {
@@ -603,10 +600,6 @@ function startMapUpdates(apiBaseUrl) {
   }
 
   function showTemporaryTrain(id, carIndex = 0, expandList = false) {
-    if (followTrainId) {
-      clearFollowTrain()
-    }
-
     if (expandList) {
       tmgr.control.setExpandedItem(id)
     } else {
@@ -620,49 +613,8 @@ function startMapUpdates(apiBaseUrl) {
     }
   }
 
-  function clearFollowTrain() {
-    followTrainId = null
-    tmgr.control.clearActiveItem()
-  }
-
   selectTrain = (id, source = "map", carIndex = 0) => {
-    if (source === "list" && followTrainId === id) {
-      clearFollowTrain()
-      tmgr.control.clearExpandedItem()
-      clearSelectedTrain()
-      return
-    }
-
     showTemporaryTrain(id, source === "list" ? 0 : carIndex, source === "list")
-  }
-
-  toggleFollowTrain = (id, source = "list", carIndex = 0) => {
-    if (followTrainId === id) {
-      clearFollowTrain()
-      tmgr.control.clearExpandedItem()
-      clearSelectedTrain()
-      return
-    }
-
-    followTrainId = id
-    setSelectedTrain(id, source === "list" ? 0 : carIndex)
-    if (source === "list") {
-      tmgr.control.setExpandedItem(id)
-      tmgr.control.setPersistentActive(id)
-    } else {
-      tmgr.control.clearExpandedItem()
-      tmgr.control.clearActiveItem()
-    }
-    followSelectedTrain()
-  }
-
-  function followSelectedTrain() {
-    if (!followTrainId) {
-      return
-    }
-
-    const carIndex = selectedTrain?.id === followTrainId ? selectedTrain.carIndex : 0
-    panToTrain(followTrainId, carIndex)
   }
 
   function clearSelectedTrain() {
@@ -670,7 +622,7 @@ function startMapUpdates(apiBaseUrl) {
     clearTemporarySelectTimer()
     selectedTrain = null
     tmgr.control.clearExpandedItem()
-    clearFollowTrain()
+    tmgr.control.clearActiveItem()
     if (previousTrainId) {
       rerenderTrain(previousTrainId)
     }
@@ -857,10 +809,6 @@ function startMapUpdates(apiBaseUrl) {
             .on("click", (e) => {
               L.DomEvent.stop(e.originalEvent)
               selectTrain(train.id, "map", i)
-            })
-            .on("dblclick", (e) => {
-              L.DomEvent.stop(e.originalEvent)
-              toggleFollowTrain(train.id, "map", i)
             }),
         })
       })
@@ -880,9 +828,6 @@ function startMapUpdates(apiBaseUrl) {
           }).on("click", (e) => {
             L.DomEvent.stop(e.originalEvent)
             selectTrain(train.id, "map", i)
-          }).on("dblclick", (e) => {
-            L.DomEvent.stop(e.originalEvent)
-            toggleFollowTrain(train.id, "map", i)
           }),
         })
       }
@@ -896,9 +841,6 @@ function startMapUpdates(apiBaseUrl) {
     setLayerRecords(trainLayers, train.id, trainLayersFor(train))
     if (selectedTrain?.id === train.id) {
       syncSelectedTrain()
-    }
-    if (followTrainId === train.id) {
-      followSelectedTrain()
     }
   }
 
@@ -991,9 +933,6 @@ function startMapUpdates(apiBaseUrl) {
       if (selectedTrain && !trains.has(selectedTrain.id)) {
         selectedTrain = null
       }
-      if (followTrainId && !trains.has(followTrainId)) {
-        clearFollowTrain()
-      }
       updateTrains()
       return
     }
@@ -1003,9 +942,6 @@ function startMapUpdates(apiBaseUrl) {
       removeLayerRecords(trainLayers, id)
       if (selectedTrain?.id === id) {
         selectedTrain = null
-      }
-      if (followTrainId === id) {
-        clearFollowTrain()
       }
     })
     message.upsert.forEach(renderTrain)
