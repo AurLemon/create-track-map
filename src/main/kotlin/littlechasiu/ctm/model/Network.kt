@@ -1,7 +1,10 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package littlechasiu.ctm.model
 
 import com.simibubi.create.content.trains.signal.SignalBlock.SignalType
 import com.simibubi.create.content.trains.signal.SignalBlockEntity.SignalState
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -84,6 +87,53 @@ data class Network(
 )
 
 @Serializable
+data class NetworkTrack(
+  @Serializable(with = UUIDSerializer::class)
+  val id: UUID,
+  val dimension: String,
+  val path: List<Point>,
+)
+
+@Serializable
+data class NetworkPortal(
+  @Serializable(with = UUIDSerializer::class)
+  val id: UUID,
+  val from: DimensionLocation,
+  val to: DimensionLocation,
+)
+
+@Serializable
+data class NetworkRealtimeSnapshot(
+  @EncodeDefault
+  val type: String = "snapshot",
+  val revision: Long,
+  val tracks: List<NetworkTrack>,
+  val portals: List<NetworkPortal>,
+  val stations: List<Station>,
+)
+
+@Serializable
+data class NetworkRealtimePatch(
+  @EncodeDefault
+  val type: String = "patch",
+  val revision: Long,
+  val trackUpsert: List<NetworkTrack>,
+  val trackRemove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+  val portalUpsert: List<NetworkPortal>,
+  val portalRemove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+  val stationUpsert: List<Station>,
+  val stationRemove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+) {
+  fun isEmpty() =
+    trackUpsert.isEmpty() &&
+      trackRemove.isEmpty() &&
+      portalUpsert.isEmpty() &&
+      portalRemove.isEmpty() &&
+      stationUpsert.isEmpty() &&
+      stationRemove.isEmpty()
+}
+
+@Serializable
 data class Signal(
   @Serializable(with = UUIDSerializer::class)
   val id: UUID,
@@ -113,6 +163,66 @@ data class BlockStatus(
 )
 
 @Serializable
+data class BlockGeometry(
+  @Serializable(with = UUIDSerializer::class)
+  val id: UUID,
+  val segments: List<Edge>,
+)
+
+@Serializable
+data class BlockState(
+  @Serializable(with = UUIDSerializer::class)
+  val id: UUID,
+  val occupied: Boolean,
+  val reserved: Boolean,
+)
+
+@Serializable
+data class BlockRealtimeSnapshot(
+  @EncodeDefault
+  val type: String = "snapshot",
+  val revision: Long,
+  val geometries: List<BlockGeometry>,
+  val states: List<BlockState>,
+)
+
+@Serializable
+data class BlockRealtimePatch(
+  @EncodeDefault
+  val type: String = "patch",
+  val revision: Long,
+  val geometryUpsert: List<BlockGeometry>,
+  val geometryRemove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+  val stateUpsert: List<BlockState>,
+  val stateRemove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+) {
+  fun isEmpty() =
+    geometryUpsert.isEmpty() &&
+      geometryRemove.isEmpty() &&
+      stateUpsert.isEmpty() &&
+      stateRemove.isEmpty()
+}
+
+@Serializable
+data class SignalRealtimeSnapshot(
+  @EncodeDefault
+  val type: String = "snapshot",
+  val revision: Long,
+  val signals: List<Signal>,
+)
+
+@Serializable
+data class SignalRealtimePatch(
+  @EncodeDefault
+  val type: String = "patch",
+  val revision: Long,
+  val upsert: List<Signal>,
+  val remove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+) {
+  fun isEmpty() = upsert.isEmpty() && remove.isEmpty()
+}
+
+@Serializable
 data class TrainCar(
   val id: Int,
   val leading: DimensionLocation? = null,
@@ -135,3 +245,22 @@ data class CreateTrain(
 data class TrainStatus(
   val trains: List<CreateTrain>,
 )
+
+@Serializable
+data class TrainRealtimeSnapshot(
+  @EncodeDefault
+  val type: String = "snapshot",
+  val revision: Long,
+  val trains: List<CreateTrain>,
+)
+
+@Serializable
+data class TrainRealtimePatch(
+  @EncodeDefault
+  val type: String = "patch",
+  val revision: Long,
+  val upsert: List<CreateTrain>,
+  val remove: List<@Serializable(with = UUIDSerializer::class) UUID>,
+) {
+  fun isEmpty() = upsert.isEmpty() && remove.isEmpty()
+}

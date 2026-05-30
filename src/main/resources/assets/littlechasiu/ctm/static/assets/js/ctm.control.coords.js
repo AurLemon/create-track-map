@@ -5,6 +5,7 @@ L.Control.Coords = L.Control.extend({
     footerText: "Forge 1.20.1",
     idleDelay: 3000,
     mobileIdleDelay: 2000,
+    mobileRotatorInterval: 3000,
   },
 
   initialize(opts) {
@@ -323,7 +324,7 @@ L.Control.Coords = L.Control.extend({
     this.mobileRotatorTimer = window.setInterval(() => {
       this.mobileRotatorIndex = (this.mobileRotatorIndex + 1) % this.mobileRotatorItems.length
       this._renderMobileRotator()
-    }, 2000)
+    }, this.options.mobileRotatorInterval)
   },
 
   _stopMobileRotator() {

@@ -45,18 +45,26 @@ object TrackMap {
   private val server = Server()
 
   val network get() = watcher.network
+  val networkRealtimeSnapshot get() = watcher.networkRealtimeSnapshot
   val signals get() = watcher.signalStatus
+  val signalRealtimeSnapshot get() = watcher.signalRealtimeSnapshot
   val blocks get() = watcher.blockStatus
+  val blockRealtimeSnapshot get() = watcher.blockRealtimeSnapshot
   val trains get() = watcher.trainStatus
+  val trainRealtimeSnapshot get() = watcher.trainRealtimeSnapshot
 
   private val scope = CoroutineScope(context = Dispatchers.IO)
   private val <T> Channel<T>.flow: SharedFlow<T>
     get() = consumeAsFlow().distinctUntilChanged()
       .shareIn(scope, SharingStarted.Eagerly)
   val networkFlow = watcher.networkChannel.flow
+  val networkPatchFlow = watcher.networkPatchChannel.flow
   val signalFlow = watcher.signalChannel.flow
+  val signalPatchFlow = watcher.signalPatchChannel.flow
   val blockFlow = watcher.blockChannel.flow
+  val blockPatchFlow = watcher.blockPatchChannel.flow
   val trainFlow = watcher.trainChannel.flow
+  val trainPatchFlow = watcher.trainPatchChannel.flow
 
   private fun ensureInjectionCss(configDir: Path): Path {
     val injectionCssFile = configDir.resolve(injectionCssFileName)

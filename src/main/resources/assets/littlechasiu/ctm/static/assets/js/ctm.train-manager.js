@@ -21,7 +21,7 @@ class TrainManager {
     this.trains.forEach((t) => {
       if (!thisTrains.has(t)) {
         this.trains.delete(t)
-        this.control.remove(t.id)
+        this.control.remove(t)
       }
     })
 

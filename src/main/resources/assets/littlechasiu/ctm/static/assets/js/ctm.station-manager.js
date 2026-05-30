@@ -21,7 +21,7 @@ class StationManager {
     this.stations.forEach((s) => {
       if (!thisStns.has(s)) {
         this.stations.delete(s)
-        this.control.remove(s.id)
+        this.control.remove(s)
       }
     })
 

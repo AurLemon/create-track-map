@@ -94,9 +94,9 @@ class Server {
       respondText(Json.encodeToString(obj), jsonContentType)
   }
 
-  private suspend inline fun <reified T> ApplicationCall.respondSSE(
-    initial: T,
-    flow: Flow<T>
+  private suspend inline fun <reified I, reified U> ApplicationCall.respondSSE(
+    initial: I,
+    flow: Flow<U>
   ) {
     respondTextWriter(contentType = ContentType.Text.EventStream) {
       writeSSE(initial)
@@ -189,16 +189,16 @@ class Server {
       get("/api/trains") { call.respondJSON(TrackMap.trains) }
 
       get("/api/network.rt") {
-        call.respondSSE(TrackMap.network, TrackMap.networkFlow)
+        call.respondSSE(TrackMap.networkRealtimeSnapshot, TrackMap.networkPatchFlow)
       }
       get("/api/signals.rt") {
-        call.respondSSE(TrackMap.signals, TrackMap.signalFlow)
+        call.respondSSE(TrackMap.signalRealtimeSnapshot, TrackMap.signalPatchFlow)
       }
       get("/api/blocks.rt") {
-        call.respondSSE(TrackMap.blocks, TrackMap.blockFlow)
+        call.respondSSE(TrackMap.blockRealtimeSnapshot, TrackMap.blockPatchFlow)
       }
       get("/api/trains.rt") {
-        call.respondSSE(TrackMap.trains, TrackMap.trainFlow)
+        call.respondSSE(TrackMap.trainRealtimeSnapshot, TrackMap.trainPatchFlow)
       }
     }
   }

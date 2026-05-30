@@ -412,173 +412,318 @@ fetch("api/config.json")
 function startMapUpdates() {
   const dmgr = new DataManager()
 
-  dmgr.onTrackStatus(({ tracks, portals, stations }) => {
-    lmgr.clearTracks()
-    lmgr.clearPortals()
-    lmgr.clearStations()
-    smgr.update(stations)
+  const tracks = new Map()
+  const portals = new Map()
+  const stations = new Map()
+  const blockGeometries = new Map()
+  const blockStates = new Map()
+  const signals = new Map()
+  const trains = new Map()
 
-    tracks.forEach((trk) => {
-      const path = trk.path
-      if (path.length === 4) {
-        L.curve(["M", xz(path[0]), "C", xz(path[1]), xz(path[2]), xz(path[3])], {
-          className: "track",
-          interactive: false,
-          pane: "tracks",
-        }).addTo(lmgr.layer(trk.dimension, "tracks"))
-      } else if (path.length === 2) {
-        L.polyline([xz(path[0]), xz(path[1])], {
-          className: "track",
-          interactive: false,
-          pane: "tracks",
-        }).addTo(lmgr.layer(trk.dimension, "tracks"))
-      }
+  const trackLayers = new Map()
+  const portalLayers = new Map()
+  const stationLayers = new Map()
+  const blockLayers = new Map()
+  const signalLayers = new Map()
+  const trainLayers = new Map()
+
+  function removeLayerRecords(cache, id) {
+    const records = cache.get(id) || []
+    records.forEach(({ parent, layer }) => parent.removeLayer(layer))
+    cache.delete(id)
+  }
+
+  function clearLayerRecords(cache) {
+    Array.from(cache.keys()).forEach((id) => removeLayerRecords(cache, id))
+  }
+
+  function setLayerRecords(cache, id, records) {
+    removeLayerRecords(cache, id)
+    records.forEach(({ parent, layer }) => layer.addTo(parent))
+    cache.set(id, records)
+  }
+
+  function trackLayer({ path }) {
+    if (path.length === 4) {
+      return L.curve(["M", xz(path[0]), "C", xz(path[1]), xz(path[2]), xz(path[3])], {
+        className: "track",
+        interactive: false,
+        pane: "tracks",
+      })
+    }
+    return L.polyline([xz(path[0]), xz(path[1])], {
+      className: "track",
+      interactive: false,
+      pane: "tracks",
+    })
+  }
+
+  function renderTrack(track) {
+    tracks.set(track.id, track)
+    setLayerRecords(trackLayers, track.id, [
+      { parent: lmgr.layer(track.dimension, "tracks"), layer: trackLayer(track) },
+    ])
+  }
+
+  function renderPortal(portal) {
+    portals.set(portal.id, portal)
+    const fromMarker = L.marker(xz(portal.from.location), {
+      icon: portalIcon,
+      pane: "stations",
+    }).on("click", () => {
+      lmgr.switchDimensions(portal.from.dimension, portal.to.dimension)
+      map.panTo(xz(portal.to.location))
+    })
+    const toMarker = L.marker(xz(portal.to.location), {
+      icon: portalIcon,
+      pane: "stations",
+    }).on("click", () => {
+      lmgr.switchDimensions(portal.to.dimension, portal.from.dimension)
+      map.panTo(xz(portal.from.location))
     })
 
-    stations.forEach((stn) => {
-      L.marker(xz(stn.location), {
-        icon: stationIcon,
-        rotationAngle: stn.angle,
-        pane: "stations",
-      })
-        .bindTooltip(stn.name, {
-          className: "station-name",
-          direction: "top",
-          offset: L.point(0, -12),
-          opacity: 0.7,
-        })
-        .addTo(lmgr.layer(stn.dimension, "stations"))
+    setLayerRecords(portalLayers, portal.id, [
+      { parent: lmgr.layer(portal.from.dimension, "portals"), layer: fromMarker },
+      { parent: lmgr.layer(portal.to.dimension, "portals"), layer: toMarker },
+    ])
+  }
+
+  function renderStation(station) {
+    stations.set(station.id, station)
+    const marker = L.marker(xz(station.location), {
+      icon: stationIcon,
+      rotationAngle: station.angle,
+      pane: "stations",
+    }).bindTooltip(station.name, {
+      className: "station-name",
+      direction: "top",
+      offset: L.point(0, -12),
+      opacity: 0.7,
     })
 
-    portals.forEach((portal) => {
-      L.marker(xz(portal.from.location), {
-        icon: portalIcon,
-        pane: "stations",
+    setLayerRecords(stationLayers, station.id, [
+      { parent: lmgr.layer(station.dimension, "stations"), layer: marker },
+    ])
+  }
+
+  function updateStations() {
+    smgr.update(Array.from(stations.values()))
+  }
+
+  function blockSegmentLayer(block, { path }) {
+    const className = "track " + (block.reserved ? "reserved" : block.occupied ? "occupied" : "")
+    if (path.length === 4) {
+      return L.curve(["M", xz(path[0]), "C", xz(path[1]), xz(path[2]), xz(path[3])], {
+        className,
+        interactive: false,
+        pane: "blocks",
       })
-        .on("click", (e) => {
-          lmgr.switchDimensions(portal.from.dimension, portal.to.dimension)
-          map.panTo(xz(portal.to.location))
-        })
-        .addTo(lmgr.layer(portal.from.dimension, "portals"))
-      L.marker(xz(portal.to.location), {
-        icon: portalIcon,
-        pane: "stations",
-      })
-        .on("click", (e) => {
-          lmgr.switchDimensions(portal.to.dimension, portal.from.dimension)
-          map.panTo(xz(portal.from.location))
-        })
-        .addTo(lmgr.layer(portal.to.dimension, "portals"))
+    }
+    return L.polyline([xz(path[0]), xz(path[1])], {
+      className,
+      interactive: false,
+      pane: "blocks",
     })
-  })
+  }
 
-  dmgr.onBlockStatus(({ blocks }) => {
-    lmgr.clearBlocks()
+  function renderBlock(id) {
+    const geometry = blockGeometries.get(id)
+    const state = blockStates.get(id)
+    removeLayerRecords(blockLayers, id)
+    if (!geometry || !state || (!state.reserved && !state.occupied)) {
+      return
+    }
 
-    blocks.forEach((block) => {
-      if (!block.reserved && !block.occupied) {
+    setLayerRecords(
+      blockLayers,
+      id,
+      geometry.segments.map((segment) => ({
+        parent: lmgr.layer(segment.dimension, "blocks"),
+        layer: blockSegmentLayer(state, segment),
+      }))
+    )
+  }
+
+  function renderSignal(signal) {
+    signals.set(signal.id, signal)
+    const records = []
+    const signalSides = [signal.forward, signal.reverse]
+
+    signalSides.forEach((side) => {
+      if (!side) {
         return
       }
-      block.segments.forEach(({ dimension, path }) => {
-        if (path.length === 4) {
-          L.curve(["M", xz(path[0]), "C", xz(path[1]), xz(path[2]), xz(path[3])], {
-            className:
-              "track " + (block.reserved ? "reserved" : block.occupied ? "occupied" : ""),
-            interactive: false,
-            pane: "blocks",
-          }).addTo(lmgr.layer(dimension, "blocks"))
-        } else if (path.length === 2) {
-          L.polyline([xz(path[0]), xz(path[1])], {
-            className:
-              "track " + (block.reserved ? "reserved" : block.occupied ? "occupied" : ""),
-            interactive: false,
-            pane: "blocks",
-          }).addTo(lmgr.layer(dimension, "blocks"))
-        }
+      const iconType = side.type === "CROSS_SIGNAL" ? chainSignalIcon : autoSignalIcon
+      records.push({
+        parent: lmgr.layer(signal.dimension, "signals"),
+        layer: L.marker(xz(signal.location), {
+          icon: iconType(side.state.toLowerCase(), leftSide),
+          rotationAngle: side.angle,
+          interactive: false,
+          pane: "signals",
+        }),
       })
     })
-  })
 
-  dmgr.onSignalStatus(({ signals }) => {
-    lmgr.clearSignals()
+    setLayerRecords(signalLayers, signal.id, records)
+  }
 
-    signals.forEach((sig) => {
-      if (!!sig.forward) {
-        let iconType = sig.forward.type === "CROSS_SIGNAL" ? chainSignalIcon : autoSignalIcon
-        let marker = L.marker(xz(sig.location), {
-          icon: iconType(sig.forward.state.toLowerCase(), leftSide),
-          rotationAngle: sig.forward.angle,
-          interactive: false,
-          pane: "signals",
-        }).addTo(lmgr.layer(sig.dimension, "signals"))
-      }
-      if (!!sig.reverse) {
-        let iconType = sig.reverse.type === "CROSS_SIGNAL" ? chainSignalIcon : autoSignalIcon
-        let marker = L.marker(xz(sig.location), {
-          icon: iconType(sig.reverse.state.toLowerCase(), leftSide),
-          rotationAngle: sig.reverse.angle,
-          interactive: false,
-          pane: "signals",
-        }).addTo(lmgr.layer(sig.dimension, "signals"))
-      }
-    })
-  })
+  function trainLayersFor(train) {
+    const records = []
+    let leadCar = null
+    if (!train.stopped) {
+      leadCar = train.backwards ? train.cars.length - 1 : 0
+    }
 
-  dmgr.onTrainStatus(({ trains }) => {
-    lmgr.clearTrains()
-    tmgr.update(trains)
+    train.cars.forEach((car, i) => {
+      const parts = car.portal
+        ? [
+            [car.leading.dimension, [xz(car.leading.location), xz(car.portal.from.location)]],
+            [car.trailing.dimension, [xz(car.portal.to.location), xz(car.trailing.location)]],
+          ]
+        : [[car.leading.dimension, [xz(car.leading.location), xz(car.trailing.location)]]]
 
-    trains.forEach((train) => {
-      let leadCar = null
-      if (!train.stopped) {
-        if (train.backwards) {
-          leadCar = train.cars.length - 1
-        } else {
-          leadCar = 0
-        }
-      }
-
-      train.cars.forEach((car, i) => {
-        let parts = car.portal
-          ? [
-              [car.leading.dimension, [xz(car.leading.location), xz(car.portal.from.location)]],
-              [car.trailing.dimension, [xz(car.portal.to.location), xz(car.trailing.location)]],
-            ]
-          : [[car.leading.dimension, [xz(car.leading.location), xz(car.trailing.location)]]]
-
-        parts.map(([dim, part]) =>
-          L.polyline(part, {
+      parts.forEach(([dim, part]) => {
+        records.push({
+          parent: lmgr.layer(dim, "trains"),
+          layer: L.polyline(part, {
             weight: 12,
             lineCap: "square",
             className: "train" + (leadCar === i ? " lead-car" : ""),
             pane: "trains",
-          })
-            .bindTooltip(
-              train.cars.length === 1
-                ? train.name
-                : `${train.name} <span class="car-number">${i + 1}</span>`,
-              {
-                className: "train-name",
-                direction: "right",
-                offset: L.point(12, 0),
-                opacity: 0.7,
-              }
-            )
-            .addTo(lmgr.layer(dim, "trains"))
-        )
+          }).bindTooltip(
+            train.cars.length === 1
+              ? train.name
+              : `${train.name} <span class="car-number">${i + 1}</span>`,
+            {
+              className: "train-name",
+              direction: "right",
+              offset: L.point(12, 0),
+              opacity: 0.7,
+            }
+          ),
+        })
+      })
 
-        if (leadCar === i) {
-          let [dim, edge] = train.backwards ? parts[parts.length - 1] : parts[0]
-          let [head, tail] = train.backwards ? [edge[1], edge[0]] : [edge[0], edge[1]]
-          let angle = 180 + (Math.atan2(tail[0] - head[0], tail[1] - head[1]) * 180) / Math.PI
+      if (leadCar === i) {
+        const [dim, edge] = train.backwards ? parts[parts.length - 1] : parts[0]
+        const [head, tail] = train.backwards ? [edge[1], edge[0]] : [edge[0], edge[1]]
+        const angle = 180 + (Math.atan2(tail[0] - head[0], tail[1] - head[1]) * 180) / Math.PI
 
-          L.marker(head, {
+        records.push({
+          parent: lmgr.layer(dim, "trains"),
+          layer: L.marker(head, {
             icon: headIcon,
             rotationAngle: angle,
             pane: "trains",
-          }).addTo(lmgr.layer(dim, "trains"))
-        }
-      })
+          }),
+        })
+      }
     })
+
+    return records
+  }
+
+  function renderTrain(train) {
+    trains.set(train.id, train)
+    setLayerRecords(trainLayers, train.id, trainLayersFor(train))
+  }
+
+  function updateTrains() {
+    tmgr.update(Array.from(trains.values()))
+  }
+
+  dmgr.onTrackStatus((message) => {
+    if (message.type === "snapshot") {
+      tracks.clear()
+      portals.clear()
+      stations.clear()
+      clearLayerRecords(trackLayers)
+      clearLayerRecords(portalLayers)
+      clearLayerRecords(stationLayers)
+      message.tracks.forEach(renderTrack)
+      message.portals.forEach(renderPortal)
+      message.stations.forEach(renderStation)
+      updateStations()
+      return
+    }
+
+    message.trackRemove.forEach((id) => {
+      tracks.delete(id)
+      removeLayerRecords(trackLayers, id)
+    })
+    message.portalRemove.forEach((id) => {
+      portals.delete(id)
+      removeLayerRecords(portalLayers, id)
+    })
+    message.stationRemove.forEach((id) => {
+      stations.delete(id)
+      removeLayerRecords(stationLayers, id)
+    })
+    message.trackUpsert.forEach(renderTrack)
+    message.portalUpsert.forEach(renderPortal)
+    message.stationUpsert.forEach(renderStation)
+    updateStations()
+  })
+
+  dmgr.onBlockStatus((message) => {
+    if (message.type === "snapshot") {
+      blockGeometries.clear()
+      blockStates.clear()
+      clearLayerRecords(blockLayers)
+      message.geometries.forEach((geometry) => blockGeometries.set(geometry.id, geometry))
+      message.states.forEach((state) => blockStates.set(state.id, state))
+      blockStates.forEach((_, id) => renderBlock(id))
+      return
+    }
+
+    message.geometryRemove.forEach((id) => {
+      blockGeometries.delete(id)
+      removeLayerRecords(blockLayers, id)
+    })
+    message.stateRemove.forEach((id) => {
+      blockStates.delete(id)
+      removeLayerRecords(blockLayers, id)
+    })
+    message.geometryUpsert.forEach((geometry) => {
+      blockGeometries.set(geometry.id, geometry)
+      renderBlock(geometry.id)
+    })
+    message.stateUpsert.forEach((state) => {
+      blockStates.set(state.id, state)
+      renderBlock(state.id)
+    })
+  })
+
+  dmgr.onSignalStatus((message) => {
+    if (message.type === "snapshot") {
+      signals.clear()
+      clearLayerRecords(signalLayers)
+      message.signals.forEach(renderSignal)
+      return
+    }
+
+    message.remove.forEach((id) => {
+      signals.delete(id)
+      removeLayerRecords(signalLayers, id)
+    })
+    message.upsert.forEach(renderSignal)
+  })
+
+  dmgr.onTrainStatus((message) => {
+    if (message.type === "snapshot") {
+      trains.clear()
+      clearLayerRecords(trainLayers)
+      message.trains.forEach(renderTrain)
+      updateTrains()
+      return
+    }
+
+    message.remove.forEach((id) => {
+      trains.delete(id)
+      removeLayerRecords(trainLayers, id)
+    })
+    message.upsert.forEach(renderTrain)
+    updateTrains()
   })
 }

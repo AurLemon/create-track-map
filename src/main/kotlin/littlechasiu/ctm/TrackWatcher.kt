@@ -69,9 +69,13 @@ class TrackWatcher() {
   }
 
   val networkChannel = Channel<Network>(Channel.CONFLATED)
+  val networkPatchChannel = Channel<NetworkRealtimePatch>(Channel.CONFLATED)
   val signalChannel = Channel<SignalStatus>(Channel.CONFLATED)
+  val signalPatchChannel = Channel<SignalRealtimePatch>(Channel.CONFLATED)
   val trainChannel = Channel<TrainStatus>(Channel.CONFLATED)
+  val trainPatchChannel = Channel<TrainRealtimePatch>(Channel.CONFLATED)
   val blockChannel = Channel<BlockStatus>(Channel.CONFLATED)
+  val blockPatchChannel = Channel<BlockRealtimePatch>(Channel.CONFLATED)
 
   data class CreateStation(
     val internal: GlobalStation,
@@ -220,11 +224,214 @@ class TrackWatcher() {
         blocks = blocks.values.map { it.sendable }.toList()
       )
 
+  private var networkRevision = 0L
+  private var blockRevision = 0L
+  private var signalRevision = 0L
+  private var trainRevision = 0L
+  private var lastNetworkTracks = mapOf<UUID, NetworkTrack>()
+  private var lastNetworkPortals = mapOf<UUID, NetworkPortal>()
+  private var lastNetworkStations = mapOf<UUID, Station>()
+  private var lastBlockGeometries = mapOf<UUID, BlockGeometry>()
+  private var lastBlockStates = mapOf<UUID, BlockState>()
+  private var lastSignals = mapOf<UUID, Signal>()
+  private var lastTrains = mapOf<UUID, CreateTrain>()
+
+  private fun stableUUID(type: String, key: String) =
+    UUID.nameUUIDFromBytes("$type|$key".toByteArray(Charsets.UTF_8))
+
+  private fun Point.key() = "$x,$y,$z"
+
+  private fun DimensionLocation.key() =
+    "$dimension|${location.key()}"
+
+  private fun Edge.networkTrack(): NetworkTrack {
+    val key = "$dimension|${path.joinToString(";") { it.key() }}"
+
+    return NetworkTrack(
+      id = stableUUID("track", key),
+      dimension = dimension,
+      path = path,
+    )
+  }
+
+  private fun Portal.networkPortal(): NetworkPortal {
+    val key = "${from.key()}|${to.key()}"
+
+    return NetworkPortal(
+      id = stableUUID("portal", key),
+      from = from,
+      to = to,
+    )
+  }
+
+  private fun Network.trackMap() =
+    tracks.map { it.networkTrack() }.associateBy { it.id }
+
+  private fun Network.portalMap() =
+    portals.map { it.networkPortal() }.associateBy { it.id }
+
+  private fun Network.stationMap() =
+    stations.associateBy { it.id }
+
+  private fun Block.geometry() =
+    BlockGeometry(
+      id = id,
+      segments = segments,
+    )
+
+  private fun Block.state() =
+    BlockState(
+      id = id,
+      occupied = occupied,
+      reserved = reserved,
+    )
+
+  private fun BlockStatus.geometries() =
+    blocks.associate { it.id to it.geometry() }
+
+  private fun BlockStatus.states() =
+    blocks.associate { it.id to it.state() }
+
+  val networkRealtimeSnapshot
+    get() =
+      NetworkRealtimeSnapshot(
+        revision = networkRevision,
+        tracks = network.trackMap().values.toList(),
+        portals = network.portalMap().values.toList(),
+        stations = network.stations,
+      )
+
+  val blockRealtimeSnapshot
+    get() =
+      BlockRealtimeSnapshot(
+        revision = blockRevision,
+        geometries = blockStatus.geometries().values.toList(),
+        states = blockStatus.states().values.toList(),
+      )
+
+  val signalRealtimeSnapshot
+    get() =
+      SignalRealtimeSnapshot(
+        revision = signalRevision,
+        signals = signalStatus.signals,
+      )
+
   val trainStatus
     get() =
       TrainStatus(
         trains = trains.map { it.sendable }.toList(),
       )
+
+  val trainRealtimeSnapshot
+    get() =
+      TrainRealtimeSnapshot(
+        revision = trainRevision,
+        trains = trainStatus.trains,
+      )
+
+  private suspend fun sendNetworkPatch(status: Network) {
+    val nextTracks = status.trackMap()
+    val nextPortals = status.portalMap()
+    val nextStations = status.stationMap()
+    val removedTrackIds = lastNetworkTracks.keys - nextTracks.keys
+    val removedPortalIds = lastNetworkPortals.keys - nextPortals.keys
+    val removedStationIds = lastNetworkStations.keys - nextStations.keys
+    val trackUpsert = nextTracks.values.filter {
+      lastNetworkTracks[it.id] != it
+    }
+    val portalUpsert = nextPortals.values.filter {
+      lastNetworkPortals[it.id] != it
+    }
+    val stationUpsert = nextStations.values.filter {
+      lastNetworkStations[it.id] != it
+    }
+    val patch = NetworkRealtimePatch(
+      revision = networkRevision + 1,
+      trackUpsert = trackUpsert,
+      trackRemove = removedTrackIds.toList(),
+      portalUpsert = portalUpsert,
+      portalRemove = removedPortalIds.toList(),
+      stationUpsert = stationUpsert,
+      stationRemove = removedStationIds.toList(),
+    )
+
+    lastNetworkTracks = nextTracks
+    lastNetworkPortals = nextPortals
+    lastNetworkStations = nextStations
+
+    if (!patch.isEmpty()) {
+      networkRevision = patch.revision
+      networkPatchChannel.send(patch)
+    }
+  }
+
+  private suspend fun sendBlockPatch(status: BlockStatus) {
+    val nextGeometries = status.geometries()
+    val nextStates = status.states()
+    val removedGeometryIds = lastBlockGeometries.keys - nextGeometries.keys
+    val removedStateIds = lastBlockStates.keys - nextStates.keys
+    val geometryUpsert = nextGeometries.values.filter {
+      lastBlockGeometries[it.id] != it
+    }
+    val stateUpsert = nextStates.values.filter {
+      lastBlockStates[it.id] != it
+    }
+    val patch = BlockRealtimePatch(
+      revision = blockRevision + 1,
+      geometryUpsert = geometryUpsert,
+      geometryRemove = removedGeometryIds.toList(),
+      stateUpsert = stateUpsert,
+      stateRemove = removedStateIds.toList(),
+    )
+
+    lastBlockGeometries = nextGeometries
+    lastBlockStates = nextStates
+
+    if (!patch.isEmpty()) {
+      blockRevision = patch.revision
+      blockPatchChannel.send(patch)
+    }
+  }
+
+  private suspend fun sendSignalPatch(status: SignalStatus) {
+    val nextSignals = status.signals.associateBy { it.id }
+    val removedSignalIds = lastSignals.keys - nextSignals.keys
+    val upsert = nextSignals.values.filter {
+      lastSignals[it.id] != it
+    }
+    val patch = SignalRealtimePatch(
+      revision = signalRevision + 1,
+      upsert = upsert,
+      remove = removedSignalIds.toList(),
+    )
+
+    lastSignals = nextSignals
+
+    if (!patch.isEmpty()) {
+      signalRevision = patch.revision
+      signalPatchChannel.send(patch)
+    }
+  }
+
+  private suspend fun sendTrainPatch(status: TrainStatus) {
+    val nextTrains = status.trains.associateBy { it.id }
+    val removedTrainIds = lastTrains.keys - nextTrains.keys
+    val upsert = nextTrains.values.filter {
+      lastTrains[it.id] != it
+    }
+    val patch = TrainRealtimePatch(
+      revision = trainRevision + 1,
+      upsert = upsert,
+      remove = removedTrainIds.toList(),
+    )
+
+    lastTrains = nextTrains
+
+    if (!patch.isEmpty()) {
+      trainRevision = patch.revision
+      trainPatchChannel.send(patch)
+    }
+  }
 
   private suspend fun update() {
     val networkEdges = mutableMapOf<TrackGraph, Set<TrackEdge>>()
@@ -341,9 +548,18 @@ class TrackWatcher() {
     // Trains
     trains.replaceWith(RR.trains.values)
 
-    networkChannel.send(network)
-    signalChannel.send(signalStatus)
-    blockChannel.send(blockStatus)
-    trainChannel.send(trainStatus)
+    val currentNetwork = network
+    val currentSignalStatus = signalStatus
+    val currentBlockStatus = blockStatus
+    val currentTrainStatus = trainStatus
+
+    networkChannel.send(currentNetwork)
+    sendNetworkPatch(currentNetwork)
+    signalChannel.send(currentSignalStatus)
+    sendSignalPatch(currentSignalStatus)
+    blockChannel.send(currentBlockStatus)
+    sendBlockPatch(currentBlockStatus)
+    trainChannel.send(currentTrainStatus)
+    sendTrainPatch(currentTrainStatus)
   }
 }

@@ -9,12 +9,15 @@ class DataManager {
   onTrackStatus(fn) {
     this.networkStream.onmessage = (e) => fn(JSON.parse(e.data))
   }
+
   onBlockStatus(fn) {
     this.blockStatusStream.onmessage = (e) => fn(JSON.parse(e.data))
   }
+
   onSignalStatus(fn) {
     this.signalStatusStream.onmessage = (e) => fn(JSON.parse(e.data))
   }
+
   onTrainStatus(fn) {
     this.trainStatusStream.onmessage = (e) => fn(JSON.parse(e.data))
   }
