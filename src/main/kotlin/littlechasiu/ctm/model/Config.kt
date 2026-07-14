@@ -166,8 +166,9 @@ data class MapConfig(
   val satelliteMaps: Map<String, SatelliteMapConfig>,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class Config @OptIn(ExperimentalSerializationApi::class) constructor(
+data class Config(
   @EncodeDefault
   val enable: Boolean = true,
 

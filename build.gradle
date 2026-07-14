@@ -1,0 +1,227 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.neoforged.gradle.userdev' version '7.0.170'
+    id 'org.jetbrains.kotlin.jvm' version '2.3.0'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.0'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+jarJar.enable()
+
+version = mod_version
+group = mod_group_id
+
+repositories {
+    mavenCentral()
+
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.ithundxr.dev/snapshots' }
+    maven { url = 'https://maven.createmod.net/' }
+    maven { url = 'https://thedarkcolour.github.io/KotlinForForge/' }
+}
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+configurations {
+    devRuntime
+    implementation.extendsFrom(devRuntime)
+}
+
+runs {
+    configureEach {
+        systemProperty 'forge.logging.markers', 'REGISTRIES'
+        systemProperty 'forge.logging.console.level', 'debug'
+
+        modSource project.sourceSets.main
+
+        dependencies {
+            runtime project.configurations.devRuntime
+        }
+    }
+
+    client {
+        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+    }
+
+    server {
+        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+        argument '--nogui'
+    }
+
+    gameTestServer {
+        systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
+    }
+
+    data {
+        arguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+dependencies {
+    implementation("net.neoforged:neoforge:${neo_version}")
+    implementation("thedarkcolour:kotlinforforge-neoforge:$kff_version")
+
+    implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
+    implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
+    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
+    implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+
+    compileOnly("io.ktor:ktor-server-cio-jvm:$ktor_version")
+    compileOnly("io.ktor:ktor-server-core-jvm:$ktor_version")
+    compileOnly("io.ktor:ktor-server-cors-jvm:$ktor_version")
+    compileOnly("org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version")
+
+    devRuntime("io.ktor:ktor-server-cio-jvm:$ktor_version") { transitive = false }
+    devRuntime("io.ktor:ktor-server-core-jvm:$ktor_version") { transitive = false }
+    devRuntime("io.ktor:ktor-server-cors-jvm:$ktor_version") { transitive = false }
+    devRuntime("org.jetbrains.kotlinx:kotlinx-io-core:0.9.0") { transitive = false }
+    devRuntime("org.jetbrains.kotlinx:kotlinx-io-bytestring:0.9.0") { transitive = false }
+    devRuntime("org.jetbrains.kotlin-wrappers:kotlin-css-jvm:$kotlin_css_version") { transitive = false }
+
+    jarJar("io.ktor:ktor-events-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-http-cio-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-http-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-io-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-network-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-serialization-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-server-cio-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-server-core-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-server-cors-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-server-host-common-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-utils-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("io.ktor:ktor-websockets-jvm") {
+        version {
+            prefer "$ktor_version"
+        }
+    }
+    jarJar("org.jetbrains.kotlinx:kotlinx-io-core") {
+        version {
+            prefer '0.9.0'
+        }
+    }
+    jarJar("org.jetbrains.kotlinx:kotlinx-io-bytestring") {
+        version {
+            prefer '0.9.0'
+        }
+    }
+    jarJar("org.jetbrains.kotlin-wrappers:kotlin-css-jvm") {
+        version {
+            prefer "$kotlin_css_version"
+        }
+    }
+
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlin_json_version")
+}
+
+tasks.named('jarJar') {
+    archiveFileName = "create-track-map-$mod_version+mc$minecraft_version-neoforge.jar"
+}
+
+jar {
+    archiveFileName = "create-track-map-$mod_version+mc$minecraft_version-neoforge-slim.jar"
+}
+
+tasks.withType(ProcessResources).configureEach {
+    def replaceProperties = [
+        minecraft_version      : minecraft_version,
+        minecraft_version_range: minecraft_version_range,
+        neo_version            : neo_version,
+        neo_version_range      : neo_version_range,
+        kff_version            : kff_version,
+        kff_version_range      : kff_version_range,
+        loader_version_range   : loader_version_range,
+        mod_id                 : mod_id,
+        mod_name               : mod_name,
+        mod_license            : mod_license,
+        mod_version            : mod_version,
+        mod_authors            : mod_authors,
+        mod_description        : mod_description,
+        create_version         : create_version_short,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
